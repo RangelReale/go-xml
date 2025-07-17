@@ -175,8 +175,9 @@ func (cfg *Config) gen(primaries, deps []xsd.Schema) (*Code, error) {
 
 	for _, primary := range primaries {
 		cfg.debugf("flattening type hierarchy for schema %q", primary.TargetNS)
-		types := cfg.flatten(primary.Types)
-		types = cfg.expandComplexTypes(types)
+		types := primary.Types
+		// types := cfg.flatten(primary.Types)
+		// types = cfg.expandComplexTypes(types)
 		for _, t := range types {
 			specs, err := cfg.genTypeSpec(t)
 			if err != nil {
@@ -691,7 +692,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	// while not explicitly inherited, do not disappear.
 	switch b := t.Base.(type) {
 	case *xsd.ComplexType:
-		t.Attributes = mergeAttributes(t, b)
+		// t.Attributes = mergeAttributes(t, b)
 		hasWildcard := false
 		for _, el := range t.Elements {
 			if el.Wildcard {
@@ -713,6 +714,13 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	attributes, elements := cfg.filterFields(t)
 	cfg.debugf("complexType %s: generating struct fields for %d elements and %d attributes",
 		xsd.XMLName(t).Local, len(elements), len(attributes))
+
+	b, ok := t.Base.(*xsd.ComplexType)
+	if ok {
+		fields = append(fields, gen.StructArg{
+			Typ: ast.NewIdent(cfg.public(b.Name)),
+		})
+	}
 
 	for _, el := range elements {
 		options := ""
@@ -839,7 +847,19 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		result = append(result, absSpec...)
 	}
 	if t.Extends {
-		s.methods = append(s.methods, cfg.genComplexTypeBase(t)...)
+		b, ok := t.Base.(*xsd.ComplexType)
+		if ok {
+			bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
+			s.methods = append(s.methods, gen.Func(bName).
+				Comment(fmt.Sprintf("Implements [%s]", bName)).
+				Receiver("t *"+s.name).
+				// Args("text []byte").
+				// Returns("error").
+				Body(``).
+				MustDecl())
+		}
+
+		// s.methods = append(s.methods, cfg.genComplexTypeBase(t)...)
 	}
 	if len(overrides) > 0 {
 		unmarshal, marshal, err := cfg.genComplexTypeMethods(t, overrides)
@@ -883,25 +903,25 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 	return []spec{s}, nil
 }
 
-func (cfg *Config) genComplexTypeBase(root *xsd.ComplexType) (ret []*ast.FuncDecl) {
-	rootName := cfg.public(root.Name)
-	t := root
-	for {
-		b, ok := t.Base.(*xsd.ComplexType)
-		if !ok {
-			return
-		}
-		bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
-		ret = append(ret, gen.Func(bName).
-			Comment(fmt.Sprintf("Implements [%s]", bName)).
-			Receiver("t *"+rootName).
-			// Args("text []byte").
-			// Returns("error").
-			Body(``).
-			MustDecl())
-		t = b
-	}
-}
+// func (cfg *Config) genComplexTypeBase(root *xsd.ComplexType) (ret []*ast.FuncDecl) {
+// 	rootName := cfg.public(root.Name)
+// 	t := root
+// 	for {
+// 		b, ok := t.Base.(*xsd.ComplexType)
+// 		if !ok {
+// 			return
+// 		}
+// 		bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
+// 		ret = append(ret, gen.Func(bName).
+// 			Comment(fmt.Sprintf("Implements [%s]", bName)).
+// 			Receiver("t *"+rootName).
+// 			// Args("text []byte").
+// 			// Returns("error").
+// 			Body(``).
+// 			MustDecl())
+// 		t = b
+// 	}
+// }
 
 func (cfg *Config) genComplexTypeMethods(t *xsd.ComplexType, overrides []fieldOverride) (marshal, unmarshal *ast.FuncDecl, err error) {
 	var data struct {
