@@ -851,7 +851,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 	if t.Extends {
 		b, ok := t.Base.(*xsd.ComplexType)
-		if ok {
+		if ok && b.Abstract {
 			bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
 			s.methods = append(s.methods, gen.Func(bName).
 				Comment(fmt.Sprintf("Implements [%s]", bName)).
