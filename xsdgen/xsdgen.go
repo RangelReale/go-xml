@@ -353,7 +353,7 @@ func (cfg *Config) expandComplexTypes(types []xsd.Type) []xsd.Type {
 				break
 			}
 		}
-		c.Extends = false
+		// c.Extends = false
 
 		alltypes[i] = c
 	})
@@ -803,11 +803,14 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			// Returns("error").
 			Body(``).
 			MustDecl())
-		absSpec, err := cfg.genComplexTypeAbstract(s.name, t)
+		absSpec, err := cfg.genComplexTypeAbstract(t)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, absSpec...)
+	}
+	if t.Extends {
+		s.methods = append(s.methods, cfg.genComplexTypeBase(t)...)
 	}
 	if len(overrides) > 0 {
 		unmarshal, marshal, err := cfg.genComplexTypeMethods(t, overrides)
@@ -826,8 +829,8 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	return result, nil
 }
 
-func (cfg *Config) genComplexTypeAbstract(name string, t *xsd.ComplexType) ([]spec, error) {
-	itfName := fmt.Sprintf("%s_%s", name, "Abstract")
+func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
+	itfName := fmt.Sprintf("%s_%s", cfg.public(t.Name), "Abstract")
 	expr := &ast.InterfaceType{
 		Methods: &ast.FieldList{
 			List: []*ast.Field{
@@ -836,12 +839,6 @@ func (cfg *Config) genComplexTypeAbstract(name string, t *xsd.ComplexType) ([]sp
 						&ast.Ident{Name: itfName},
 					},
 					Type: &ast.FuncType{},
-					// Type: gen.Func(fmt.Sprintf("Abstract_%s", name)).
-					// 	Receiver("t *" + name).
-					// 	// Args("text []byte").
-					// 	// Returns("error").
-					// 	Body(``).
-					// 	MustDecl(),
 				},
 			},
 		},
@@ -852,10 +849,28 @@ func (cfg *Config) genComplexTypeAbstract(name string, t *xsd.ComplexType) ([]sp
 		name:    itfName,
 		expr:    expr,
 		xsdType: t,
-		// helperTypes: helperTypes,
 	}
 
 	return []spec{s}, nil
+}
+
+func (cfg *Config) genComplexTypeBase(root *xsd.ComplexType) (ret []*ast.FuncDecl) {
+	rootName := cfg.public(root.Name)
+	t := root
+	for {
+		b, ok := t.Base.(*xsd.ComplexType)
+		if !ok {
+			return
+		}
+		bName := cfg.public(b.Name)
+		ret = append(ret, gen.Func(fmt.Sprintf("%s_Abstract", bName)).
+			Receiver("t *"+rootName).
+			// Args("text []byte").
+			// Returns("error").
+			Body(``).
+			MustDecl())
+		t = b
+	}
 }
 
 func (cfg *Config) genComplexTypeMethods(t *xsd.ComplexType, overrides []fieldOverride) (marshal, unmarshal *ast.FuncDecl, err error) {
