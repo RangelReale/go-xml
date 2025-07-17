@@ -802,12 +802,13 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		name := namegen.attribute(attr.Name)
 		// fields = append(fields, name, base, gen.String(tag))
 		fields = append(fields, gen.StructArg{
-			Doc:  attr.Doc,
-			Name: name,
-			Typ:  base,
-			Tag:  gen.String(tag),
+			Doc:      attr.Doc,
+			Name:     name,
+			Typ:      base,
+			Tag:      gen.String(tag),
+			Optional: attr.Optional,
 		})
-		if attr.Default != "" || nonTrivialBuiltin(attr.Type) {
+		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
 			typeName := cfg.exprString(attr.Type)
 			if nonTrivialBuiltin(attr.Type) {
 				h, ok := cfg.helperTypes[xsd.XMLName(attr.Type)]
