@@ -718,13 +718,14 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	b, ok := t.Base.(*xsd.ComplexType)
 	if ok {
 		fields = append(fields, gen.StructArg{
-			Typ: ast.NewIdent(cfg.public(b.Name)),
+			Typ: &ast.StarExpr{X: ast.NewIdent(cfg.public(b.Name))},
 		})
 	}
 
 	for _, el := range elements {
 		options := ""
-		if el.Nillable || el.Optional {
+		optional := el.Nillable || el.Optional
+		if optional {
 			options = ",omitempty"
 		}
 		tag := fmt.Sprintf(`xml:"%s %s%s"`, el.Name.Space, el.Name.Local, options)
@@ -750,12 +751,13 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		}
 		// fields = append(fields, name, base, gen.String(tag))
 		fields = append(fields, gen.StructArg{
-			Doc:  el.Doc,
-			Name: name,
-			Typ:  base,
-			Tag:  gen.String(tag),
+			Doc:      el.Doc,
+			Name:     name,
+			Typ:      base,
+			Tag:      gen.String(tag),
+			Optional: optional && !el.Plural,
 		})
-		if el.Default != "" || nonTrivialBuiltin(el.Type) {
+		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
 			typeName := cfg.exprString(el.Type)
 			if nonTrivialBuiltin(el.Type) {
 				h, ok := cfg.helperTypes[xsd.XMLName(el.Type)]
@@ -902,26 +904,6 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 
 	return []spec{s}, nil
 }
-
-// func (cfg *Config) genComplexTypeBase(root *xsd.ComplexType) (ret []*ast.FuncDecl) {
-// 	rootName := cfg.public(root.Name)
-// 	t := root
-// 	for {
-// 		b, ok := t.Base.(*xsd.ComplexType)
-// 		if !ok {
-// 			return
-// 		}
-// 		bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
-// 		ret = append(ret, gen.Func(bName).
-// 			Comment(fmt.Sprintf("Implements [%s]", bName)).
-// 			Receiver("t *"+rootName).
-// 			// Args("text []byte").
-// 			// Returns("error").
-// 			Body(``).
-// 			MustDecl())
-// 		t = b
-// 	}
-// }
 
 func (cfg *Config) genComplexTypeMethods(t *xsd.ComplexType, overrides []fieldOverride) (marshal, unmarshal *ast.FuncDecl, err error) {
 	var data struct {

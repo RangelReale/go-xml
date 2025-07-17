@@ -70,6 +70,7 @@ func ToString(expr ast.Expr) (string, error) {
 type StructArg struct {
 	Doc            string
 	Name, Typ, Tag ast.Expr
+	Optional       bool
 }
 
 // Struct creates a struct{} expression. The arguments are a series
@@ -85,7 +86,11 @@ func Struct(args ...StructArg) *ast.StructType {
 			field.Names = []*ast.Ident{arg.Name.(*ast.Ident)}
 		}
 		if arg.Typ != nil {
-			field.Type = arg.Typ
+			if arg.Optional {
+				field.Type = &ast.StarExpr{X: arg.Typ}
+			} else {
+				field.Type = arg.Typ
+			}
 		}
 		if arg.Tag != nil {
 			field.Tag = arg.Tag.(*ast.BasicLit)
