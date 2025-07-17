@@ -67,27 +67,31 @@ func ToString(expr ast.Expr) (string, error) {
 	return buf.String(), err
 }
 
+type StructArg struct {
+	Doc            string
+	Name, Typ, Tag ast.Expr
+}
+
 // Struct creates a struct{} expression. The arguments are a series
 // of name/type/tag tuples. Name must be of type *ast.Ident, type
 // must be of type ast.Expr, and tag must be of type *ast.BasicLit,
 // The number of arguments must be a multiple of 3, or a run-time
 // panic will occur.
-func Struct(args ...ast.Expr) *ast.StructType {
+func Struct(args ...StructArg) *ast.StructType {
 	fields := new(ast.FieldList)
-	if len(args)%3 != 0 {
-		panic("Number of args to FieldList must be a multiple of 3, got " + strconv.Itoa(len(args)))
-	}
-	for i := 0; i < len(args); i += 3 {
+	for _, arg := range args {
 		var field ast.Field
-		name, typ, tag := args[i], args[i+1], args[i+2]
-		if name != nil {
-			field.Names = []*ast.Ident{name.(*ast.Ident)}
+		if arg.Name != nil {
+			field.Names = []*ast.Ident{arg.Name.(*ast.Ident)}
 		}
-		if typ != nil {
-			field.Type = typ
+		if arg.Typ != nil {
+			field.Type = arg.Typ
 		}
-		if tag != nil {
-			field.Tag = tag.(*ast.BasicLit)
+		if arg.Tag != nil {
+			field.Tag = arg.Tag.(*ast.BasicLit)
+		}
+		if arg.Doc != "" {
+			field.Comment = CommentGroup(arg.Doc)
 		}
 		fields.List = append(fields.List, &field)
 	}

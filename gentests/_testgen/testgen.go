@@ -81,10 +81,10 @@ func writeTestFiles(code, tests *ast.File, pkg string) error {
 // schema-generated code. The unit test will do the
 // following:
 //
-// - Unmarshal the sample data (dataFile) into a struct representing
-//   the document described in the XML schema.
-// - Marshal the resulting file back into an XML document.
-// - Compare the two documents for equality.
+//   - Unmarshal the sample data (dataFile) into a struct representing
+//     the document described in the XML schema.
+//   - Marshal the resulting file back into an XML document.
+//   - Compare the two documents for equality.
 //
 // Returns type definitions and unit tests as separate files.
 func genXSDTests(cfg xsdgen.Config, data []byte, pkg string) (code, tests *ast.File, err error) {
@@ -112,13 +112,16 @@ func genXSDTests(cfg xsdgen.Config, data []byte, pkg string) (code, tests *ast.F
 	}
 	root := roots[0]
 	doc := topLevelElements(root)
-	fields := make([]ast.Expr, 0, len(doc)*3)
+	// fields := make([]ast.Expr, 0, len(doc)*3)
+	fields := make([]gen.StructArg, 0, len(doc))
 
 	for _, elem := range doc {
 		fields = append(fields,
-			gen.Public(elem.Name.Local),
-			ast.NewIdent(main.NameOf(elem.Type)),
-			gen.String(fmt.Sprintf(`xml:"%s %s"`, elem.Name.Space, elem.Name.Local)))
+			gen.StructArg{
+				Name: gen.Public(elem.Name.Local),
+				Typ:  ast.NewIdent(main.NameOf(elem.Type)),
+				Tag:  gen.String(fmt.Sprintf(`xml:"%s %s"`, elem.Name.Space, elem.Name.Local)),
+			})
 	}
 	expr, err := gen.ToString(gen.Struct(fields...))
 	if err != nil {
