@@ -253,7 +253,7 @@ func (fn *Function) Decl() (*ast.FuncDecl, error) {
 	if fn.name == "" {
 		return nil, errors.New("function name unset")
 	}
-	if len(fn.body) == 0 {
+	if len(fn.returns) > 0 && len(fn.body) == 0 {
 		return nil, fmt.Errorf("function body for %s unset", fn.name)
 	}
 

@@ -365,11 +365,11 @@ func (cfg *Config) expandComplexTypes(types []xsd.Type) []xsd.Type {
 // type that the user wants included in the Go source. In affect, what we
 // want to do is take the linked list:
 //
-// 	t1 -> t2 -> t3 -> builtin
+//	t1 -> t2 -> t3 -> builtin
 //
 // And produce a set of tuples:
 //
-// 	t1 -> builtin, t2 -> builtin, t3 -> builtin
+//	t1 -> builtin, t2 -> builtin, t3 -> builtin
 //
 // This is a heuristic that tends to generate better-looking Go code.
 func (cfg *Config) flatten(types map[xml.Name]xsd.Type) []xsd.Type {
@@ -796,6 +796,19 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		xsdType:     t,
 		helperTypes: helperTypes,
 	}
+	if t.Abstract {
+		s.methods = append(s.methods, gen.Func(fmt.Sprintf("%s_Abstract", s.name)).
+			Receiver("t *"+s.name).
+			// Args("text []byte").
+			// Returns("error").
+			Body(``).
+			MustDecl())
+		absSpec, err := cfg.genComplexTypeAbstract(s.name, t)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, absSpec...)
+	}
 	if len(overrides) > 0 {
 		unmarshal, marshal, err := cfg.genComplexTypeMethods(t, overrides)
 		if err != nil {
@@ -811,6 +824,38 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 	result = append(result, s)
 	return result, nil
+}
+
+func (cfg *Config) genComplexTypeAbstract(name string, t *xsd.ComplexType) ([]spec, error) {
+	itfName := fmt.Sprintf("%s_%s", name, "Abstract")
+	expr := &ast.InterfaceType{
+		Methods: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Names: []*ast.Ident{
+						&ast.Ident{Name: itfName},
+					},
+					Type: &ast.FuncType{},
+					// Type: gen.Func(fmt.Sprintf("Abstract_%s", name)).
+					// 	Receiver("t *" + name).
+					// 	// Args("text []byte").
+					// 	// Returns("error").
+					// 	Body(``).
+					// 	MustDecl(),
+				},
+			},
+		},
+	}
+
+	s := spec{
+		doc:     t.Doc,
+		name:    itfName,
+		expr:    expr,
+		xsdType: t,
+		// helperTypes: helperTypes,
+	}
+
+	return []spec{s}, nil
 }
 
 func (cfg *Config) genComplexTypeMethods(t *xsd.ComplexType, overrides []fieldOverride) (marshal, unmarshal *ast.FuncDecl, err error) {
