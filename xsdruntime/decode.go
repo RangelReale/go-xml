@@ -20,22 +20,22 @@ type FieldDecoder[T any] struct {
 	Content    string     `xml:",innerxml"`
 }
 
-type DecoderInstanceFactoryFunc func(name string) (any, error)
-
 type DecoderInstanceFactory struct {
 	Namespaces *DecoderNamespace
-	Factories  map[string]DecoderInstanceFactoryFunc
+	Factories  map[string]InfoDecl
 }
 
 func NewDecoderInstanceFactory(namespaces *DecoderNamespace) *DecoderInstanceFactory {
 	return &DecoderInstanceFactory{
 		Namespaces: namespaces,
-		Factories:  make(map[string]DecoderInstanceFactoryFunc),
+		Factories:  make(map[string]InfoDecl),
 	}
 }
 
-func (f *DecoderInstanceFactory) Register(namespace string, factory func(name string) (any, error)) {
-	f.Factories[namespace] = factory
+func (f *DecoderInstanceFactory) Register(infoDecl ...InfoDecl) {
+	for _, i := range infoDecl {
+		f.Factories[i.Namespace()] = i
+	}
 }
 
 func (f *DecoderInstanceFactory) CreateAliased(aliasedName string) (any, error) {
@@ -57,7 +57,7 @@ func (f *DecoderInstanceFactory) Create(ns, name string) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("could not find factory for namespace '%s'", ns)
 	}
-	return nsf(name)
+	return nsf.NewInstance(name)
 }
 
 type DecoderNamespace struct {

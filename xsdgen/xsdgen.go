@@ -288,22 +288,22 @@ func (code *Code) GenAST() (*ast.File, error) {
 		}
 	}
 
-	if len(code.targetNS) > 0 {
-		file.Decls = append(file.Decls, &ast.GenDecl{
-			Tok: token.CONST,
-			Specs: []ast.Spec{
-				&ast.ValueSpec{
-					Names:  []*ast.Ident{ast.NewIdent("__namespace__")},
-					Values: []ast.Expr{ast.NewIdent(fmt.Sprintf(`"%s"`, code.targetNS[0]))}, // TODO
-				},
-			},
-		})
-
-		err := code.genASTNewInstanceRegister(&file, keys)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// if len(code.targetNS) > 0 {
+	// 	file.Decls = append(file.Decls, &ast.GenDecl{
+	// 		Tok: token.CONST,
+	// 		Specs: []ast.Spec{
+	// 			&ast.ValueSpec{
+	// 				Names:  []*ast.Ident{ast.NewIdent("__namespace__")},
+	// 				Values: []ast.Expr{ast.NewIdent(fmt.Sprintf(`"%s"`, code.targetNS[0]))}, // TODO
+	// 			},
+	// 		},
+	// 	})
+	//
+	// 	err := code.genASTNewInstanceRegister(&file, keys)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
 	err := code.genASTNewInstance(&file, keys)
 	if err != nil {
@@ -318,59 +318,118 @@ func (code *Code) GenAST() (*ast.File, error) {
 	return &file, nil
 }
 
-func (code *Code) genASTNewInstanceRegister(file *ast.File, keys []string) error {
-	var newInstanceBody strings.Builder
-	_, _ = newInstanceBody.WriteString(`f(__namespace__, NewInstance)` + "\n")
-	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
-	if err != nil {
-		return err
-	}
+// func (code *Code) genASTNewInstanceRegister(file *ast.File, keys []string) error {
+// 	var newInstanceBody strings.Builder
+// 	_, _ = newInstanceBody.WriteString(`f(__namespace__, NewInstance)` + "\n")
+// 	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
+// 	if err != nil {
+// 		return err
+// 	}
+//
+// 	file.Decls = append(file.Decls, &ast.FuncDecl{
+// 		Name: ast.NewIdent("NewInstanceRegister"),
+// 		Type: &ast.FuncType{
+// 			Params: &ast.FieldList{
+// 				List: []*ast.Field{
+// 					&ast.Field{
+// 						Names: []*ast.Ident{ast.NewIdent("f")},
+// 						Type: &ast.FuncType{
+// 							Params: &ast.FieldList{List: []*ast.Field{
+// 								&ast.Field{
+// 									Type: &ast.Ident{Name: "string"},
+// 								},
+// 								&ast.Field{
+// 									Type: &ast.FuncType{
+// 										Params: &ast.FieldList{List: []*ast.Field{
+// 											{
+// 												Names: []*ast.Ident{ast.NewIdent("name")},
+// 												Type:  &ast.Ident{Name: "string"},
+// 											},
+// 										}},
+// 										Results: &ast.FieldList{
+// 											List: []*ast.Field{
+// 												&ast.Field{
+// 													Type: &ast.Ident{Name: "any"},
+// 												},
+// 												&ast.Field{
+// 													Type: &ast.Ident{Name: "error"},
+// 												},
+// 											},
+// 										},
+// 									},
+// 								},
+// 							}},
+// 						},
+// 					},
+// 				},
+// 			},
+// 		},
+// 		Body: bodyBlock,
+// 	})
+//
+// 	return nil
+// }
 
-	file.Decls = append(file.Decls, &ast.FuncDecl{
-		Name: ast.NewIdent("NewInstanceRegister"),
-		Type: &ast.FuncType{
-			Params: &ast.FieldList{
-				List: []*ast.Field{
-					&ast.Field{
-						Names: []*ast.Ident{ast.NewIdent("f")},
-						Type: &ast.FuncType{
-							Params: &ast.FieldList{List: []*ast.Field{
-								&ast.Field{
-									Type: &ast.Ident{Name: "string"},
-								},
-								&ast.Field{
-									Type: &ast.FuncType{
-										Params: &ast.FieldList{List: []*ast.Field{
-											{
-												Names: []*ast.Ident{ast.NewIdent("name")},
-												Type:  &ast.Ident{Name: "string"},
-											},
-										}},
-										Results: &ast.FieldList{
-											List: []*ast.Field{
-												&ast.Field{
-													Type: &ast.Ident{Name: "any"},
-												},
-												&ast.Field{
-													Type: &ast.Ident{Name: "error"},
-												},
-											},
-										},
-									},
-								},
-							}},
-						},
+func (code *Code) genASTNewInstance(file *ast.File, keys []string) error {
+	// var Info__DECL = &infoDecl{}
+	file.Decls = append(file.Decls, &ast.GenDecl{
+		Tok: token.VAR,
+		Specs: []ast.Spec{
+			&ast.ValueSpec{
+				Names: []*ast.Ident{ast.NewIdent("Info__DECL")},
+				Values: []ast.Expr{
+					&ast.UnaryExpr{
+						Op: token.AND,
+						X:  &ast.CompositeLit{Type: ast.NewIdent("info__DECL")},
 					},
 				},
 			},
 		},
-		Body: bodyBlock,
 	})
 
-	return nil
-}
+	// type info__DECL struct{}
+	file.Decls = append(file.Decls, &ast.GenDecl{
+		Tok: token.TYPE,
+		Specs: []ast.Spec{
+			&ast.TypeSpec{
+				Name: ast.NewIdent("info__DECL"),
+				Type: &ast.CompositeLit{
+					Type: ast.NewIdent("struct"),
+				},
+			},
+		},
+	})
 
-func (code *Code) genASTNewInstance(file *ast.File, keys []string) error {
+	if len(code.targetNS) > 0 {
+		// func (info__DECL) Namespace() string
+		nsBodyBlock, err := gen.ParseBlock(fmt.Sprintf(`return "%s"`, code.targetNS[0]))
+		if err != nil {
+			return err
+		}
+
+		file.Decls = append(file.Decls, &ast.FuncDecl{
+			Name: ast.NewIdent("Namespace"),
+			Recv: &ast.FieldList{
+				List: []*ast.Field{
+					&ast.Field{
+						Type: ast.NewIdent("info__DECL"),
+					},
+				},
+			},
+			Type: &ast.FuncType{
+				Results: &ast.FieldList{
+					List: []*ast.Field{
+						&ast.Field{
+							Type: &ast.Ident{Name: "string"},
+						},
+					},
+				},
+			},
+			Body: nsBodyBlock,
+		})
+	}
+
+	// func (info__DECL) NewInstance(name string) (any, error)
 	var newInstanceBody strings.Builder
 	_, _ = newInstanceBody.WriteString(`switch name {` + "\n")
 
@@ -396,6 +455,13 @@ func (code *Code) genASTNewInstance(file *ast.File, keys []string) error {
 
 	file.Decls = append(file.Decls, &ast.FuncDecl{
 		Name: ast.NewIdent("NewInstance"),
+		Recv: &ast.FieldList{
+			List: []*ast.Field{
+				&ast.Field{
+					Type: ast.NewIdent("info__DECL"),
+				},
+			},
+		},
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
