@@ -462,7 +462,7 @@ func (cfg *Config) expr(t xsd.Type) (ast.Expr, error) {
 // Return the identifier for non-builtin types, or the Go expression
 // mapped to the built-in type.
 // func (cfg *Config) exprName(name xml.Name, t xsd.Type) (ast.Expr, error) {
-func (cfg *Config) exprName(t xsd.Type) (ast.Expr, error) {
+func (cfg *Config) exprName(t xsd.Type, isImpl bool) (ast.Expr, error) {
 	if t, ok := t.(xsd.Builtin); ok {
 		ex := builtinExpr(t)
 		if ex == nil {
@@ -471,7 +471,7 @@ func (cfg *Config) exprName(t xsd.Type) (ast.Expr, error) {
 		return ex, nil
 	}
 	name := xsd.XMLName(t)
-	typeName := cfg.public(name)
+	typeName := cfg.publicType(t, isImpl)
 
 	if cfg.isGenNamespace(name.Space) {
 		return ast.NewIdent(typeName), nil
@@ -501,9 +501,9 @@ func (cfg *Config) exprString(t xsd.Type) string {
 }
 
 // func (cfg *Config) exprNameString(name xml.Name, t xsd.Type) string {
-func (cfg *Config) exprNameString(t xsd.Type) string {
+func (cfg *Config) exprNameString(t xsd.Type, isImpl bool) string {
 	var buf bytes.Buffer
-	expr, err := cfg.exprName(t)
+	expr, err := cfg.exprName(t, isImpl)
 	if err != nil {
 		return ""
 	}
@@ -526,6 +526,26 @@ func (cfg *Config) public(name xml.Name) string {
 		name = cfg.nameTransform(name)
 	}
 	return strings.Title(name.Local)
+}
+
+func (cfg *Config) publicType(t xsd.Type, isImpl bool) string {
+	if xcomplex, ok := t.(*xsd.ComplexType); ok {
+		return cfg.publicComplex(xcomplex, isImpl)
+	}
+	return cfg.public(xsd.XMLName(t))
+}
+
+func (cfg *Config) publicComplex(t *xsd.ComplexType, isImpl bool) string {
+	name := cfg.public(t.Name)
+	if t.Abstract && isImpl {
+		return name + "__Impl"
+	} else {
+		return name
+	}
+}
+
+func (cfg *Config) abstractFunction(t *xsd.ComplexType) string {
+	return fmt.Sprintf("is%s", cfg.public(t.Name))
 }
 
 //

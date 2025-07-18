@@ -732,7 +732,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 
 	b, ok := t.Base.(*xsd.ComplexType)
 	if ok {
-		bident, err := cfg.exprName(b)
+		bident, err := cfg.exprName(b, true)
 		if err != nil {
 			return nil, fmt.Errorf("%s base type %s: %v")
 		}
@@ -749,7 +749,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			options = ",omitempty"
 		}
 		tag := fmt.Sprintf(`xml:"%s %s%s"`, el.Name.Space, el.Name.Local, options)
-		base, err := cfg.exprName(el.Type)
+		base, err := cfg.exprName(el.Type, false)
 		if err != nil {
 			return nil, fmt.Errorf("%s element %s: %v", t.Name.Local, el.Name.Local, err)
 		}
@@ -778,7 +778,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Optional: optional && !el.Plural,
 		})
 		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
-			typeName := cfg.exprNameString(el.Type)
+			typeName := cfg.exprNameString(el.Type, true)
 			if nonTrivialBuiltin(el.Type) {
 				h, ok := cfg.helperTypes[xsd.XMLName(el.Type)]
 				if !ok {
@@ -790,7 +790,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			overrides = append(overrides, fieldOverride{
 				DefaultValue: el.Default,
 				FieldName:    name.(*ast.Ident).Name,
-				FromType:     cfg.exprNameString(el.Type),
+				FromType:     cfg.exprNameString(el.Type, true),
 				Tag:          tag,
 				ToType:       typeName,
 				Type:         el.Type,
@@ -814,7 +814,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		} else {
 			tag = fmt.Sprintf(`xml:"%s,attr%s"`, attr.Name.Local, options)
 		}
-		base, err := cfg.exprName(attr.Type)
+		base, err := cfg.exprName(attr.Type, true)
 		if err != nil {
 			return nil, fmt.Errorf("%s attribute %s: %v", t.Name.Local, attr.Name.Local, err)
 		}
@@ -828,7 +828,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Optional: attr.Optional,
 		})
 		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
-			typeName := cfg.exprNameString(attr.Type)
+			typeName := cfg.exprNameString(attr.Type, true)
 			if nonTrivialBuiltin(attr.Type) {
 				h, ok := cfg.helperTypes[xsd.XMLName(attr.Type)]
 				if !ok {
@@ -840,7 +840,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			overrides = append(overrides, fieldOverride{
 				DefaultValue: attr.Default,
 				FieldName:    name.(*ast.Ident).Name,
-				FromType:     cfg.exprNameString(attr.Type),
+				FromType:     cfg.exprNameString(attr.Type, true),
 				Tag:          tag,
 				ToType:       typeName,
 				Type:         attr.Type,
@@ -850,16 +850,14 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	expr := gen.Struct(fields...)
 	s := spec{
 		doc:         t.Doc,
-		name:        cfg.public(t.Name),
+		name:        cfg.publicType(t, true),
 		expr:        expr,
 		xsdType:     t,
 		helperTypes: helperTypes,
 	}
 	if t.Abstract {
-		s.methods = append(s.methods, gen.Func(fmt.Sprintf("%s_Abstract", s.name)).
+		s.methods = append(s.methods, gen.Func(cfg.abstractFunction(t)).
 			Receiver("t *"+s.name).
-			// Args("text []byte").
-			// Returns("error").
 			Body(``).
 			MustDecl())
 		absSpec, err := cfg.genComplexTypeAbstract(t)
@@ -868,19 +866,17 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		}
 		result = append(result, absSpec...)
 	}
-	if t.Extends {
-		b, ok := t.Base.(*xsd.ComplexType)
-		if ok && b.Abstract {
-			bName := fmt.Sprintf("%s_Abstract", cfg.public(b.Name))
-			s.methods = append(s.methods, gen.Func(bName).
-				Comment(fmt.Sprintf("Implements [%s]", bName)).
-				Receiver("t *"+s.name).
-				// Args("text []byte").
-				// Returns("error").
-				Body(``).
-				MustDecl())
-		}
-	}
+	// if t.Extends {
+	// 	b, ok := t.Base.(*xsd.ComplexType)
+	// 	if ok && b.Abstract {
+	// 		bName := cfg.publicType(b, false)
+	// 		s.methods = append(s.methods, gen.Func(cfg.abstractFunction(b)).
+	// 			Comment(fmt.Sprintf("Implements [%s]", bName)).
+	// 			Receiver("t *"+s.name).
+	// 			Body(``).
+	// 			MustDecl())
+	// 	}
+	// }
 	if len(overrides) > 0 {
 		unmarshal, marshal, err := cfg.genComplexTypeMethods(t, overrides)
 		if err != nil {
@@ -899,13 +895,12 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 }
 
 func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
-	itfName := fmt.Sprintf("%s_%s", cfg.public(t.Name), "Abstract")
 	expr := &ast.InterfaceType{
 		Methods: &ast.FieldList{
 			List: []*ast.Field{
 				{
 					Names: []*ast.Ident{
-						&ast.Ident{Name: itfName},
+						&ast.Ident{Name: cfg.abstractFunction(t)},
 					},
 					Type: &ast.FuncType{},
 				},
@@ -915,7 +910,7 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 
 	s := spec{
 		doc:     t.Doc,
-		name:    itfName,
+		name:    cfg.publicType(t, false),
 		expr:    expr,
 		xsdType: t,
 	}
@@ -929,7 +924,7 @@ func (cfg *Config) genComplexTypeMethods(t *xsd.ComplexType, overrides []fieldOv
 		Type      string
 	}
 	data.Overrides = overrides
-	data.Type = cfg.public(t.Name)
+	data.Type = cfg.publicType(t, true)
 
 	unmarshal, err = gen.Func("UnmarshalXML").
 		Receiver("t *"+data.Type).
@@ -1012,7 +1007,7 @@ func (cfg *Config) genSimpleType(t *xsd.SimpleType) ([]spec, error) {
 		})
 		return result, nil
 	}
-	base, err := cfg.exprName(t.Base)
+	base, err := cfg.exprName(t.Base, true)
 	if err != nil {
 		return nil, fmt.Errorf("simpleType %s: base type %s: %v",
 			t.Name.Local, xsd.XMLName(t.Base).Local, err)
@@ -1096,7 +1091,7 @@ func (cfg *Config) addSpecConstants(t *xsd.SimpleType, s spec) spec {
 // methods.
 func (cfg *Config) genSimpleListSpec(t *xsd.SimpleType) ([]spec, error) {
 	cfg.debugf("generating Go source for simple list %q", xsd.XMLName(t).Local)
-	expr, err := cfg.exprName(t.Base)
+	expr, err := cfg.exprName(t.Base, true)
 	if err != nil {
 		return nil, err
 	}
