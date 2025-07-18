@@ -101,7 +101,7 @@ func (dn *DecoderNamespace) WrapNamespacesInXML(rootElement string, content stri
 
 	_, _ = data.WriteString(content)
 
-	_, _ = data.WriteString("\n" + `</otx>`)
+	_, _ = data.WriteString("\n" + fmt.Sprintf(`</%s>`, rootElement))
 
 	return data.String()
 }
