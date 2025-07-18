@@ -34,7 +34,7 @@ func NewDecoderInstanceFactory(namespaces *DecoderNamespace) *DecoderInstanceFac
 	}
 }
 
-func (f *DecoderInstanceFactory) Register(namespace string, factory DecoderInstanceFactoryFunc) {
+func (f *DecoderInstanceFactory) Register(namespace string, factory func(name string) (any, error)) {
 	f.Factories[namespace] = factory
 }
 
