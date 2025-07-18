@@ -45,6 +45,7 @@ type Config struct {
 	allowTypes map[xml.Name]bool
 
 	nsImports map[string]nsImport
+	isDecode  bool
 }
 
 type typeTransform func(xsd.Schema, xsd.Type) xsd.Type
@@ -256,6 +257,14 @@ func FollowImports(follow bool) Option {
 	}
 }
 
+func IsDecode(isDecode bool) Option {
+	return func(cfg *Config) Option {
+		prev := cfg.isDecode
+		cfg.isDecode = isDecode
+		return IsDecode(prev)
+	}
+}
+
 // Replace allows for substitution rules for all identifiers to
 // be specified. If an invalid regular expression is called, no action
 // is taken. The Replace option is additive; subsitutions will be
@@ -462,7 +471,7 @@ func (cfg *Config) expr(t xsd.Type) (ast.Expr, error) {
 // Return the identifier for non-builtin types, or the Go expression
 // mapped to the built-in type.
 // func (cfg *Config) exprName(name xml.Name, t xsd.Type) (ast.Expr, error) {
-func (cfg *Config) exprName(t xsd.Type, isImpl bool) (ast.Expr, error) {
+func (cfg *Config) exprName(t xsd.Type, nameType NameType) (ast.Expr, error) {
 	if t, ok := t.(xsd.Builtin); ok {
 		ex := builtinExpr(t)
 		if ex == nil {
@@ -471,7 +480,7 @@ func (cfg *Config) exprName(t xsd.Type, isImpl bool) (ast.Expr, error) {
 		return ex, nil
 	}
 	name := xsd.XMLName(t)
-	typeName := cfg.publicType(t, isImpl)
+	typeName := cfg.publicType(t, nameType)
 
 	if cfg.isGenNamespace(name.Space) {
 		return ast.NewIdent(typeName), nil
@@ -501,9 +510,9 @@ func (cfg *Config) exprString(t xsd.Type) string {
 }
 
 // func (cfg *Config) exprNameString(name xml.Name, t xsd.Type) string {
-func (cfg *Config) exprNameString(t xsd.Type, isImpl bool) string {
+func (cfg *Config) exprNameString(t xsd.Type, nameType NameType) string {
 	var buf bytes.Buffer
-	expr, err := cfg.exprName(t, isImpl)
+	expr, err := cfg.exprName(t, nameType)
 	if err != nil {
 		return ""
 	}
@@ -521,6 +530,15 @@ func (cfg *Config) NameOf(name xml.Name) string {
 	return cfg.public(name)
 }
 
+type NameType int
+
+const (
+	NameTypeGeneral  NameType = iota
+	NameTypeAbstract NameType = iota
+	NameTypeImpl
+	NameTypeDecoder
+)
+
 func (cfg *Config) public(name xml.Name) string {
 	if cfg.nameTransform != nil {
 		name = cfg.nameTransform(name)
@@ -528,17 +546,19 @@ func (cfg *Config) public(name xml.Name) string {
 	return strings.Title(name.Local)
 }
 
-func (cfg *Config) publicType(t xsd.Type, isImpl bool) string {
+func (cfg *Config) publicType(t xsd.Type, nameType NameType) string {
 	if xcomplex, ok := t.(*xsd.ComplexType); ok {
-		return cfg.publicComplex(xcomplex, isImpl)
+		return cfg.publicComplex(xcomplex, nameType)
 	}
 	return cfg.public(xsd.XMLName(t))
 }
 
-func (cfg *Config) publicComplex(t *xsd.ComplexType, isImpl bool) string {
+func (cfg *Config) publicComplex(t *xsd.ComplexType, nameType NameType) string {
 	name := cfg.public(t.Name)
-	if t.Abstract && isImpl {
+	if t.Abstract && nameType == NameTypeImpl {
 		return name + "__Impl"
+	} else if cfg.isDecode && (nameType == NameTypeDecoder || (t.Abstract && nameType == NameTypeGeneral)) {
+		return name + "__Decoder"
 	} else {
 		return name
 	}
@@ -553,6 +573,13 @@ func (cfg *Config) isAbstract(t xsd.Type) bool {
 		return xcomplex.Abstract
 	}
 	return false
+}
+
+func (cfg *Config) isOptional(t xsd.Type) bool {
+	if cfg.isDecode {
+		return true
+	}
+	return !cfg.isAbstract(t)
 }
 
 //
