@@ -44,8 +44,9 @@ type Config struct {
 	// will be selected.
 	allowTypes map[xml.Name]bool
 
-	nsImports map[string]nsImport
-	isDecode  bool
+	nsImports        map[string]nsImport
+	isDecode         bool
+	decodeImportPath string
 }
 
 type typeTransform func(xsd.Schema, xsd.Type) xsd.Type
@@ -257,11 +258,13 @@ func FollowImports(follow bool) Option {
 	}
 }
 
-func IsDecode(isDecode bool) Option {
+func IsDecode(isDecode bool, decodeImportPath string) Option {
 	return func(cfg *Config) Option {
 		prev := cfg.isDecode
+		prevPath := cfg.decodeImportPath
 		cfg.isDecode = isDecode
-		return IsDecode(prev)
+		cfg.decodeImportPath = decodeImportPath
+		return IsDecode(prev, prevPath)
 	}
 }
 

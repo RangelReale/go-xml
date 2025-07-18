@@ -251,6 +251,15 @@ func (code *Code) GenAST() (*ast.File, error) {
 			},
 		},
 	}
+	if code.cfg.isDecode {
+		gd.Specs = append(gd.Specs, &ast.ImportSpec{
+			Path: &ast.BasicLit{
+				Kind:  token.STRING,
+				Value: fmt.Sprintf(`"%s"`, code.cfg.decodeImportPath),
+			},
+			Name: ast.NewIdent("dec"),
+		})
+	}
 	for _, imp := range code.imports {
 		gd.Specs = append(gd.Specs, &ast.ImportSpec{
 			Path: &ast.BasicLit{
@@ -1003,6 +1012,19 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		}
 		result = append(result, absSpec...)
 	}
+
+	if cfg.isDecode {
+		s.methods = append(s.methods, gen.Func("Decode").
+			// Comment(op.Doc).
+			Receiver("t *"+s.name).
+			Args("dif *xsdruntime.DecoderInstanceFactory").
+			Body(`
+				ret := &dec.%s{}
+return ret, nil`, s.name).
+			Returns(fmt.Sprintf("*dec.%s", s.name), "error").
+			MustDecl())
+	}
+
 	// if t.Extends {
 	// 	b, ok := t.Base.(*xsd.ComplexType)
 	// 	if ok && b.Abstract {
