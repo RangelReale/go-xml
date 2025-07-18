@@ -1014,28 +1014,9 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 
 	if cfg.isDecode {
-		s.methods = append(s.methods, gen.Func("Decode").
-			// Comment(op.Doc).
-			Receiver("t *"+s.name).
-			Args("dif *xsdruntime.DecoderInstanceFactory").
-			Body(`
-				ret := &dec.%s{}
-return ret, nil`, s.name).
-			Returns(fmt.Sprintf("*dec.%s", s.name), "error").
-			MustDecl())
+		s.methods = append(s.methods, cfg.genComplexTypeDecodeMethod(s.name, t))
 	}
 
-	// if t.Extends {
-	// 	b, ok := t.Base.(*xsd.ComplexType)
-	// 	if ok && b.Abstract {
-	// 		bName := cfg.publicType(b, false)
-	// 		s.methods = append(s.methods, gen.Func(cfg.abstractFunction(b)).
-	// 			Comment(fmt.Sprintf("Implements [%s]", bName)).
-	// 			Receiver("t *"+s.name).
-	// 			Body(``).
-	// 			MustDecl())
-	// 	}
-	// }
 	if len(overrides) > 0 {
 		unmarshal, marshal, err := cfg.genComplexTypeMethods(t, overrides)
 		if err != nil {
@@ -1051,6 +1032,18 @@ return ret, nil`, s.name).
 	}
 	result = append(result, s)
 	return result, nil
+}
+
+func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType) *ast.FuncDecl {
+	return gen.Func("Decode").
+		// Comment(op.Doc).
+		Receiver("t *"+name).
+		Args("dif *xsdruntime.DecoderInstanceFactory").
+		Body(`
+				ret := &dec.%s{}
+return ret, nil`, name).
+		Returns(fmt.Sprintf("*dec.%s", name), "error").
+		MustDecl()
 }
 
 func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
