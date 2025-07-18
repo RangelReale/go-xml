@@ -237,6 +237,15 @@ func (code *Code) GenAST() (*ast.File, error) {
 
 	gd := ast.GenDecl{
 		Tok: token.IMPORT,
+		Specs: []ast.Spec{
+			&ast.ImportSpec{
+				Path: &ast.BasicLit{
+					Kind:  token.STRING,
+					Value: fmt.Sprintf(`"%s"`, "aqwari.net/xml/xsdruntime"),
+				},
+				Name: ast.NewIdent("xsdruntime"),
+			},
+		},
 	}
 	for _, imp := range code.imports {
 		gd.Specs = append(gd.Specs, &ast.ImportSpec{
@@ -280,7 +289,10 @@ func (code *Code) GenAST() (*ast.File, error) {
 
 	for _, name := range keys {
 		info := code.decls[name]
-		if _, isStruct := info.expr.(*ast.StructType); !isStruct {
+		if info.isInterface {
+			continue
+		}
+		if _, isComplexType := info.xsdType.(*xsd.ComplexType); !isComplexType {
 			continue
 		}
 		_, _ = newInstanceBody.WriteString(fmt.Sprintf(`case "%s":`, info.name) + "\n")
@@ -332,6 +344,7 @@ type spec struct {
 	name, doc   string
 	expr        ast.Expr
 	private     bool
+	isInterface bool
 	enumValues  []string
 	methods     []*ast.FuncDecl
 	xsdType     xsd.Type
@@ -956,10 +969,11 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 		},
 	}
 	ret = append(ret, spec{
-		doc:     t.Doc,
-		name:    cfg.publicType(t, NameTypeAbstract),
-		expr:    expr,
-		xsdType: t,
+		doc:         t.Doc,
+		name:        cfg.publicType(t, NameTypeAbstract),
+		expr:        expr,
+		isInterface: true,
+		xsdType:     t,
 	})
 
 	if cfg.isDecode {
@@ -968,32 +982,18 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			return nil, err
 		}
 
-		decExpr := gen.Struct(
-			gen.StructArg{
-				Name: ast.NewIdent("Value"),
-				Typ:  valueExpr,
-				Tag:  gen.String(`xml:"-"`),
-			},
-			gen.StructArg{
-				Name: ast.NewIdent("XSIType"),
-				Typ:  builtinExpr(xsd.String),
-				Tag:  gen.String(`xml:"http://www.w3.org/2001/XMLSchema-instance type,attr"`),
-			},
-			gen.StructArg{
-				Name: ast.NewIdent("Attributes"),
-				Typ:  &ast.ArrayType{Elt: &ast.Ident{Name: "xml.Attr"}},
-				Tag:  gen.String(`xml:",any,attr"`),
-			},
-			gen.StructArg{
-				Name: ast.NewIdent("Content"),
-				Typ:  builtinExpr(xsd.AnyType),
-				Tag:  gen.String(`xml:",innerxml"`),
-			},
-		)
 		ret = append(ret, spec{
-			// doc:     t.Doc,
-			name:    cfg.publicType(t, NameTypeDecoder),
-			expr:    decExpr,
+			doc:  t.Doc,
+			name: cfg.publicType(t, NameTypeDecoder),
+			expr: &ast.IndexExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("xsdruntime"),
+					Sel: ast.NewIdent("Decoder"),
+				},
+				Lbrack: 0,
+				Index:  valueExpr,
+				Rbrack: 0,
+			},
 			xsdType: t,
 		})
 	}
