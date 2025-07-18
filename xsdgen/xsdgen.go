@@ -988,7 +988,7 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			expr: &ast.IndexExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("xsdruntime"),
-					Sel: ast.NewIdent("Decoder"),
+					Sel: ast.NewIdent("FieldDecoder"),
 				},
 				Lbrack: 0,
 				Index:  valueExpr,
