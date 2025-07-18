@@ -769,13 +769,12 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		if el.Plural {
 			base = &ast.ArrayType{Elt: base}
 		}
-		// fields = append(fields, name, base, gen.String(tag))
 		fields = append(fields, gen.StructArg{
 			Doc:      el.Doc,
 			Name:     name,
 			Typ:      base,
 			Tag:      gen.String(tag),
-			Optional: optional && !el.Plural,
+			Optional: optional && !el.Plural && !cfg.isAbstract(el.Type),
 		})
 		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
 			typeName := cfg.exprNameString(el.Type, true)
@@ -825,7 +824,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Name:     name,
 			Typ:      base,
 			Tag:      gen.String(tag),
-			Optional: attr.Optional,
+			Optional: attr.Optional && !cfg.isAbstract(attr.Type),
 		})
 		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
 			typeName := cfg.exprNameString(attr.Type, true)

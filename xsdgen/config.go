@@ -548,6 +548,13 @@ func (cfg *Config) abstractFunction(t *xsd.ComplexType) string {
 	return fmt.Sprintf("is%s", cfg.public(t.Name))
 }
 
+func (cfg *Config) isAbstract(t xsd.Type) bool {
+	if xcomplex, ok := t.(*xsd.ComplexType); ok {
+		return xcomplex.Abstract
+	}
+	return false
+}
+
 //
 
 // SOAP arrays are declared as follows (unimportant fields ellided):
