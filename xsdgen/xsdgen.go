@@ -931,12 +931,12 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			gen.StructArg{
 				Name: ast.NewIdent("XSIType"),
 				Typ:  builtinExpr(xsd.String),
-				Tag:  gen.String(`xsi:type,attr`),
+				Tag:  gen.String(`xml:"http://www.w3.org/2001/XMLSchema-instance type,attr"`),
 			},
 			gen.StructArg{
 				Name: ast.NewIdent("Content"),
 				Typ:  builtinExpr(xsd.AnyType),
-				Tag:  gen.String(`,any`),
+				Tag:  gen.String(`xml:",any"`),
 			},
 		)
 		ret = append(ret, spec{
