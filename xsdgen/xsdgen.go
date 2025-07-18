@@ -76,11 +76,12 @@ func (m specListing) keys() (result []string) {
 // package. It can be used to generate a Go source file, and to
 // lookup identifiers and attributes for a given type.
 type Code struct {
-	cfg     *Config
-	names   map[xml.Name]string
-	decls   specListing
-	types   map[xml.Name]xsd.Type
-	imports []nsImport
+	cfg      *Config
+	targetNS []string
+	names    map[xml.Name]string
+	decls    specListing
+	types    map[xml.Name]xsd.Type
+	imports  []nsImport
 }
 
 // DocType retrieves the complexType for the provided target
@@ -152,6 +153,9 @@ func (cfg *Config) gen(primaries, deps []xsd.Schema) (*Code, error) {
 		}
 	}
 	for _, dep := range deps {
+		if dep.TargetNS != "" && cfg.isGenNamespace(dep.TargetNS) {
+			code.targetNS = append(code.targetNS, dep.TargetNS)
+		}
 		for k, v := range dep.Types {
 			all[k] = v
 		}
@@ -284,6 +288,89 @@ func (code *Code) GenAST() (*ast.File, error) {
 		}
 	}
 
+	if len(code.targetNS) > 0 {
+		file.Decls = append(file.Decls, &ast.GenDecl{
+			Tok: token.CONST,
+			Specs: []ast.Spec{
+				&ast.ValueSpec{
+					Names:  []*ast.Ident{ast.NewIdent("__namespace__")},
+					Values: []ast.Expr{ast.NewIdent(fmt.Sprintf(`"%s"`, code.targetNS[0]))}, // TODO
+				},
+			},
+		})
+
+		err := code.genASTNewInstanceRegister(&file, keys)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := code.genASTNewInstance(&file, keys)
+	if err != nil {
+		return nil, err
+	}
+
+	pkgname := code.cfg.pkgname
+	if pkgname == "" {
+		pkgname = "ws"
+	}
+	file.Name = ast.NewIdent(pkgname)
+	return &file, nil
+}
+
+func (code *Code) genASTNewInstanceRegister(file *ast.File, keys []string) error {
+	var newInstanceBody strings.Builder
+	_, _ = newInstanceBody.WriteString(`f(__namespace__, NewInstance)` + "\n")
+	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
+	if err != nil {
+		return err
+	}
+
+	file.Decls = append(file.Decls, &ast.FuncDecl{
+		Name: ast.NewIdent("NewInstanceRegister"),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					&ast.Field{
+						Names: []*ast.Ident{ast.NewIdent("f")},
+						Type: &ast.FuncType{
+							Params: &ast.FieldList{List: []*ast.Field{
+								&ast.Field{
+									Type: &ast.Ident{Name: "string"},
+								},
+								&ast.Field{
+									Type: &ast.FuncType{
+										Params: &ast.FieldList{List: []*ast.Field{
+											{
+												Names: []*ast.Ident{ast.NewIdent("name")},
+												Type:  &ast.Ident{Name: "string"},
+											},
+										}},
+										Results: &ast.FieldList{
+											List: []*ast.Field{
+												&ast.Field{
+													Type: &ast.Ident{Name: "any"},
+												},
+												&ast.Field{
+													Type: &ast.Ident{Name: "error"},
+												},
+											},
+										},
+									},
+								},
+							}},
+						},
+					},
+				},
+			},
+		},
+		Body: bodyBlock,
+	})
+
+	return nil
+}
+
+func (code *Code) genASTNewInstance(file *ast.File, keys []string) error {
 	var newInstanceBody strings.Builder
 	_, _ = newInstanceBody.WriteString(`switch name {` + "\n")
 
@@ -304,7 +391,7 @@ func (code *Code) GenAST() (*ast.File, error) {
 
 	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	file.Decls = append(file.Decls, &ast.FuncDecl{
@@ -332,12 +419,7 @@ func (code *Code) GenAST() (*ast.File, error) {
 		Body: bodyBlock,
 	})
 
-	pkgname := code.cfg.pkgname
-	if pkgname == "" {
-		pkgname = "ws"
-	}
-	file.Name = ast.NewIdent(pkgname)
-	return &file, nil
+	return nil
 }
 
 type spec struct {
