@@ -1047,9 +1047,12 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			},
 		},
 	}
+
+	abstractTypeName := cfg.publicType(t, NameTypeAbstract)
+
 	ret = append(ret, spec{
 		doc:         t.Doc,
-		name:        cfg.publicType(t, NameTypeAbstract),
+		name:        abstractTypeName,
 		expr:        expr,
 		isInterface: true,
 		xsdType:     t,
@@ -1061,20 +1064,80 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			return nil, err
 		}
 
-		ret = append(ret, spec{
+		var decoderResolveBody strings.Builder
+		_, _ = decoderResolveBody.WriteString(`resolved, err := dif.CreateAliased(d.XSIType)` + "\n")
+		_, _ = decoderResolveBody.WriteString(`if err != nil {` + "\n")
+		_, _ = decoderResolveBody.WriteString(`return nil, err` + "\n")
+		_, _ = decoderResolveBody.WriteString(`}` + "\n")
+		_, _ = decoderResolveBody.WriteString(fmt.Sprintf(`if rtype, ok := resolved.(%s); ok {`, abstractTypeName) + "\n")
+		_, _ = decoderResolveBody.WriteString(`return rtype, err` + "\n")
+		_, _ = decoderResolveBody.WriteString(`}` + "\n")
+		_, _ = decoderResolveBody.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("expected resolved type to be '%s' but is %T", resolved)`, abstractTypeName) + "\n")
+
+		decoderResolveBodyBlock, err := gen.ParseBlock(decoderResolveBody.String())
+		if err != nil {
+			return nil, err
+		}
+
+		decoderTypeName := cfg.publicType(t, NameTypeDecoder)
+
+		decoderSpec := spec{
 			doc:  t.Doc,
-			name: cfg.publicType(t, NameTypeDecoder),
-			expr: &ast.IndexExpr{
-				X: &ast.SelectorExpr{
-					X:   ast.NewIdent("xsdruntime"),
-					Sel: ast.NewIdent("FieldDecoder"),
-				},
-				Lbrack: 0,
-				Index:  valueExpr,
-				Rbrack: 0,
+			name: decoderTypeName,
+			// expr: &ast.IndexExpr{
+			// 	X: &ast.SelectorExpr{
+			// 		X:   ast.NewIdent("xsdruntime"),
+			// 		Sel: ast.NewIdent("FieldDecoder"),
+			// 	},
+			// 	Lbrack: 0,
+			// 	Index:  valueExpr,
+			// 	Rbrack: 0,
+			// },
+			expr: &ast.SelectorExpr{
+				X:   ast.NewIdent("xsdruntime"),
+				Sel: ast.NewIdent("FieldDecoder"),
 			},
 			xsdType: t,
-		})
+			methods: []*ast.FuncDecl{
+				&ast.FuncDecl{
+					Name: ast.NewIdent("Resolve"),
+					Recv: &ast.FieldList{
+						List: []*ast.Field{
+							&ast.Field{
+								Names: []*ast.Ident{ast.NewIdent("d")},
+								Type:  &ast.UnaryExpr{Op: token.MUL, X: ast.NewIdent(decoderTypeName)},
+							},
+						},
+					},
+					Type: &ast.FuncType{
+						Params: &ast.FieldList{
+							List: []*ast.Field{
+								&ast.Field{
+									Names: []*ast.Ident{ast.NewIdent("dif")},
+									Type: &ast.UnaryExpr{Op: token.MUL, X: &ast.SelectorExpr{
+										X:   ast.NewIdent("xsdruntime"),
+										Sel: ast.NewIdent("DecoderInstanceFactory"),
+									}},
+								},
+							},
+						},
+						Results: &ast.FieldList{
+							List: []*ast.Field{
+								&ast.Field{
+									Type: valueExpr,
+								},
+								&ast.Field{
+									Type: ast.NewIdent("error"),
+								},
+							},
+						},
+					},
+					Body: decoderResolveBodyBlock,
+				},
+			},
+		}
+
+		ret = append(ret, decoderSpec)
 	}
 
 	return ret, nil

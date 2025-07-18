@@ -13,8 +13,7 @@ import (
 // 	T // not allowed by Go
 // }
 
-type FieldDecoder[T any] struct {
-	Value      T          `xml:"-"`
+type FieldDecoder struct {
 	XSIType    string     `xml:"http://www.w3.org/2001/XMLSchema-instance type,attr"`
 	Attributes []xml.Attr `xml:",any,attr"`
 	Content    string     `xml:",innerxml"`
