@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/format"
 	"regexp"
+	"slices"
 	"strings"
 
 	"aqwari.net/xml/internal/gen"
@@ -42,11 +43,18 @@ type Config struct {
 	// if populated, only types that are true in this map
 	// will be selected.
 	allowTypes map[xml.Name]bool
+
+	nsImports map[string]nsImport
 }
 
 type typeTransform func(xsd.Schema, xsd.Type) xsd.Type
 type propertyFilter func(interface{}) bool
 type specTransform func(spec) spec
+
+type nsImport struct {
+	Path  string
+	Alias string
+}
 
 func (cfg *Config) logf(format string, v ...interface{}) {
 	if cfg.logger != nil && cfg.loglevel > 0 {
@@ -451,9 +459,51 @@ func (cfg *Config) expr(t xsd.Type) (ast.Expr, error) {
 	return ast.NewIdent(cfg.public(xsd.XMLName(t))), nil
 }
 
+// Return the identifier for non-builtin types, or the Go expression
+// mapped to the built-in type.
+// func (cfg *Config) exprName(name xml.Name, t xsd.Type) (ast.Expr, error) {
+func (cfg *Config) exprName(t xsd.Type) (ast.Expr, error) {
+	if t, ok := t.(xsd.Builtin); ok {
+		ex := builtinExpr(t)
+		if ex == nil {
+			return nil, fmt.Errorf("Unknown built-in type %q", t.Name().Local)
+		}
+		return ex, nil
+	}
+	name := xsd.XMLName(t)
+	typeName := cfg.public(name)
+
+	if cfg.isGenNamespace(name.Space) {
+		return ast.NewIdent(typeName), nil
+	}
+	if nsi, ok := cfg.nsImports[name.Space]; ok {
+		return &ast.SelectorExpr{
+			X:   ast.NewIdent(nsi.Alias),
+			Sel: ast.NewIdent(typeName),
+		}, nil
+	} else {
+		return nil, fmt.Errorf("unknown import for namespace '%s'", name.Space)
+	}
+}
+
 func (cfg *Config) exprString(t xsd.Type) string {
 	var buf bytes.Buffer
 	expr, err := cfg.expr(t)
+	if err != nil {
+		return ""
+	}
+	if err := format.Node(&buf, nil, expr); err != nil {
+		// This should never happen, cfg.expr should always return a
+		// valid expression if err != nil
+		panic(fmt.Errorf("Error formatting node expression %#v: %v", expr, err))
+	}
+	return buf.String()
+}
+
+// func (cfg *Config) exprNameString(name xml.Name, t xsd.Type) string {
+func (cfg *Config) exprNameString(t xsd.Type) string {
+	var buf bytes.Buffer
+	expr, err := cfg.exprName(t)
 	if err != nil {
 		return ""
 	}
@@ -864,4 +914,27 @@ func (cfg *Config) soapArrayToSlice(s spec) spec {
 	s.methods = append(s.methods, marshal)
 	s.methods = append(s.methods, unmarshal)
 	return s
+}
+
+func (cfg *Config) isGenNamespace(ns string) bool {
+	if len(cfg.namespaces) == 0 {
+		return true
+	}
+	return slices.Contains(cfg.namespaces, ns)
+}
+
+func NSImport(ns string, path string, alias string) Option {
+	return func(cfg *Config) Option {
+		if cfg.nsImports == nil {
+			cfg.nsImports = make(map[string]nsImport)
+		}
+		cfg.nsImports[ns] = nsImport{
+			Path:  path,
+			Alias: alias,
+		}
+		return func(cfg *Config) Option {
+			delete(cfg.nsImports, ns)
+			return NSImport(ns, path, alias)
+		}
+	}
 }
