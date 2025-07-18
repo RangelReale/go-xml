@@ -287,7 +287,7 @@ func (fn *Function) Decl() (*ast.FuncDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := parseBlock(fn.body)
+	body, err := ParseBlock(fn.body)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse function body of %s: %v in\n%s", fn.name, err, fn.body)
 	}
@@ -400,7 +400,7 @@ func Snippets(val interface{}, snippets ...string) ([]ast.Decl, error) {
 	return Declarations(blocks...)
 }
 
-func parseBlock(s string) (*ast.BlockStmt, error) {
+func ParseBlock(s string) (*ast.BlockStmt, error) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "package tmp\nfunc _block() {\n%s\n}", s)

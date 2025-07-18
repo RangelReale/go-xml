@@ -274,6 +274,52 @@ func (code *Code) GenAST() (*ast.File, error) {
 			file.Decls = append(file.Decls, f)
 		}
 	}
+
+	var newInstanceBody strings.Builder
+	_, _ = newInstanceBody.WriteString(`switch name {` + "\n")
+
+	for _, name := range keys {
+		info := code.decls[name]
+		if _, isStruct := info.expr.(*ast.StructType); !isStruct {
+			continue
+		}
+		_, _ = newInstanceBody.WriteString(fmt.Sprintf(`case "%s":`, info.name) + "\n")
+		_, _ = newInstanceBody.WriteString(fmt.Sprintf(`return &%s{}, nil`, info.name) + "\n")
+	}
+
+	_, _ = newInstanceBody.WriteString(`}` + "\n")
+	_, _ = newInstanceBody.WriteString(`return nil, fmt.Errorf("unknown name: '%s'", name)` + "\n")
+
+	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
+	if err != nil {
+		return nil, err
+	}
+
+	file.Decls = append(file.Decls, &ast.FuncDecl{
+		Name: ast.NewIdent("NewInstance"),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					&ast.Field{
+						Names: []*ast.Ident{ast.NewIdent("name")},
+						Type:  &ast.Ident{Name: "string"},
+					},
+				},
+			},
+			Results: &ast.FieldList{
+				List: []*ast.Field{
+					&ast.Field{
+						Type: &ast.Ident{Name: "any"},
+					},
+					&ast.Field{
+						Type: &ast.Ident{Name: "error"},
+					},
+				},
+			},
+		},
+		Body: bodyBlock,
+	})
+
 	pkgname := code.cfg.pkgname
 	if pkgname == "" {
 		pkgname = "ws"
