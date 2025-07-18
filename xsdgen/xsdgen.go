@@ -743,44 +743,57 @@ type nameGenerator struct {
 	taken map[string]struct{}
 }
 
-func (gen *nameGenerator) unique(name string) ast.Expr {
+func (gen *nameGenerator) uniqueName(name string) string {
 	const maxDupNames = 1000
 	if _, ok := gen.taken[name]; ok {
 		for i := 0; i < maxDupNames; i++ {
 			unique := name + strconv.Itoa(i)
 			if _, ok := gen.taken[unique]; !ok {
 				gen.taken[unique] = struct{}{}
-				return ast.NewIdent(unique)
+				return unique
 			}
 		}
 	} else {
 		gen.taken[name] = struct{}{}
 	}
-	return ast.NewIdent(name)
+	return name
+}
+
+func (gen *nameGenerator) unique(name string) ast.Expr {
+	return ast.NewIdent(gen.uniqueName(name))
+}
+
+func (gen *nameGenerator) attributeName(base xml.Name) string {
+	name := gen.cfg.public(base)
+	if _, ok := gen.taken[name]; !ok {
+		gen.taken[name] = struct{}{}
+		return name
+	}
+	return gen.uniqueName(name + "Attr")
 }
 
 func (gen *nameGenerator) attribute(base xml.Name) ast.Expr {
+	return ast.NewIdent(gen.attributeName(base))
+}
+
+func (gen *nameGenerator) elementName(base xml.Name) string {
 	name := gen.cfg.public(base)
 	if _, ok := gen.taken[name]; !ok {
 		gen.taken[name] = struct{}{}
-		return ast.NewIdent(name)
+		return name
 	}
-	return gen.unique(name + "Attr")
+	return gen.uniqueName(name)
 }
 
 func (gen *nameGenerator) element(base xml.Name) ast.Expr {
-	name := gen.cfg.public(base)
-	if _, ok := gen.taken[name]; !ok {
-		gen.taken[name] = struct{}{}
-		return ast.NewIdent(name)
-	}
-	return gen.unique(name)
+	return ast.NewIdent(gen.elementName(base))
 }
 
 func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	var result []spec
 	// var fields []ast.Expr
 	var fields []gen.StructArg
+	var decodeConfigs []decodeConfig
 	var overrides []fieldOverride
 	var helperTypes []xml.Name
 
@@ -812,6 +825,10 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 				Typ:  expr,
 				Tag:  gen.String(`xml:",chardata"`),
 			})
+			decodeConfigs = append(decodeConfigs, decodeConfig{
+				name: cfg.publicType(base, NameTypeGeneral),
+				op:   decodeOpCopy,
+			})
 		case xsd.Builtin:
 			if b == xsd.AnyType {
 				// extending anyType doesn't really make sense, but
@@ -839,11 +856,16 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 					Type:      b,
 				})
 			}
+			uname := namegen.uniqueName(name)
 			fields = append(fields, gen.StructArg{
 				Doc:  "",
-				Name: namegen.unique(name),
+				Name: ast.NewIdent(uname),
 				Typ:  expr,
 				Tag:  gen.String(tag),
+			})
+			decodeConfigs = append(decodeConfigs, decodeConfig{
+				name: uname,
+				op:   decodeOpCopy,
 			})
 		default:
 			panic(fmt.Errorf("%s does not derive from a builtin type", t.Name.Local))
@@ -887,6 +909,11 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		fields = append(fields, gen.StructArg{
 			Typ: &ast.StarExpr{X: bident},
 		})
+		dname := cfg.publicType(b, NameTypeImpl)
+		decodeConfigs = append(decodeConfigs, decodeConfig{
+			name: dname,
+			op:   decodeOpCopy,
+		})
 	}
 
 	for _, el := range elements {
@@ -900,13 +927,16 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s element %s: %v", t.Name.Local, el.Name.Local, err)
 		}
-		name := namegen.element(el.Name)
+		elName := namegen.elementName(el.Name)
+		var name ast.Expr = ast.NewIdent(elName)
 		if el.Wildcard {
 			tag = `xml:",any"`
 			if el.Plural {
 				name = ast.NewIdent("Items")
+				elName = "Items"
 			} else {
 				name = ast.NewIdent("Item")
+				elName = "Item"
 			}
 			if b, ok := el.Type.(xsd.Builtin); ok && b == xsd.AnyType {
 				cfg.debugf("complexType %s: defaulting wildcard element to []string", t.Name.Local)
@@ -923,6 +953,11 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Tag:      gen.String(tag),
 			Optional: optional && !el.Plural && cfg.isOptional(el.Type),
 		})
+		decodeConfigs = append(decodeConfigs, decodeConfig{
+			name: elName,
+			op:   decodeOpCopy,
+		})
+
 		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
 			typeName := cfg.exprNameString(el.Type, NameTypeImpl)
 			if nonTrivialBuiltin(el.Type) {
@@ -965,7 +1000,8 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			return nil, fmt.Errorf("%s attribute %s: %v", t.Name.Local, attr.Name.Local, err)
 		}
 		cfg.debugf("adding %s attribute %s as %v", t.Name.Local, attr.Name.Local, base)
-		name := namegen.attribute(attr.Name)
+		atName := namegen.attributeName(attr.Name)
+		var name ast.Expr = ast.NewIdent(atName)
 		fields = append(fields, gen.StructArg{
 			Doc:      attr.Doc,
 			Name:     name,
@@ -973,6 +1009,11 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Tag:      gen.String(tag),
 			Optional: attr.Optional && cfg.isOptional(attr.Type),
 		})
+		decodeConfigs = append(decodeConfigs, decodeConfig{
+			name: atName,
+			op:   decodeOpCopy,
+		})
+
 		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
 			typeName := cfg.exprNameString(attr.Type, NameTypeImpl)
 			if nonTrivialBuiltin(attr.Type) {
@@ -1014,7 +1055,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 
 	if cfg.isDecode {
-		s.methods = append(s.methods, cfg.genComplexTypeDecodeMethod(s.name, t))
+		s.methods = append(s.methods, cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs))
 	}
 
 	if len(overrides) > 0 {
@@ -1034,14 +1075,18 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	return result, nil
 }
 
-func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType) *ast.FuncDecl {
+func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
+	var body strings.Builder
+	_, _ = body.WriteString(fmt.Sprintf(`ret := &dec.%s{}`, name) + "\n")
+	// for _, dc := range decodeConfigs {
+	// 	_, _ = body.WriteString(fmt.Sprintf(`ret.%s = t.%s`, dc.name, dc.name) + "\n")
+	// }
+	_, _ = body.WriteString(`return ret, nil` + "\n")
+
 	return gen.Func("Decode").
-		// Comment(op.Doc).
 		Receiver("t *"+name).
 		Args("dif *xsdruntime.DecoderInstanceFactory").
-		Body(`
-				ret := &dec.%s{}
-return ret, nil`, name).
+		Body(body.String()).
 		Returns(fmt.Sprintf("*dec.%s", name), "error").
 		MustDecl()
 }
@@ -1594,4 +1639,16 @@ Loop:
 		src.Attributes = append(src.Attributes, baseattr)
 	}
 	return src.Attributes
+}
+
+type decodeOp int
+
+const (
+	decodeOpCopy decodeOp = iota
+	decodeOpDecode
+)
+
+type decodeConfig struct {
+	name string
+	op   decodeOp
 }
