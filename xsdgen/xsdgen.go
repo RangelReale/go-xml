@@ -288,23 +288,6 @@ func (code *Code) GenAST() (*ast.File, error) {
 		}
 	}
 
-	// if len(code.targetNS) > 0 {
-	// 	file.Decls = append(file.Decls, &ast.GenDecl{
-	// 		Tok: token.CONST,
-	// 		Specs: []ast.Spec{
-	// 			&ast.ValueSpec{
-	// 				Names:  []*ast.Ident{ast.NewIdent("__namespace__")},
-	// 				Values: []ast.Expr{ast.NewIdent(fmt.Sprintf(`"%s"`, code.targetNS[0]))}, // TODO
-	// 			},
-	// 		},
-	// 	})
-	//
-	// 	err := code.genASTNewInstanceRegister(&file, keys)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// }
-
 	err := code.genASTNewInstance(&file, keys)
 	if err != nil {
 		return nil, err
@@ -317,58 +300,6 @@ func (code *Code) GenAST() (*ast.File, error) {
 	file.Name = ast.NewIdent(pkgname)
 	return &file, nil
 }
-
-// func (code *Code) genASTNewInstanceRegister(file *ast.File, keys []string) error {
-// 	var newInstanceBody strings.Builder
-// 	_, _ = newInstanceBody.WriteString(`f(__namespace__, NewInstance)` + "\n")
-// 	bodyBlock, err := gen.ParseBlock(newInstanceBody.String())
-// 	if err != nil {
-// 		return err
-// 	}
-//
-// 	file.Decls = append(file.Decls, &ast.FuncDecl{
-// 		Name: ast.NewIdent("NewInstanceRegister"),
-// 		Type: &ast.FuncType{
-// 			Params: &ast.FieldList{
-// 				List: []*ast.Field{
-// 					&ast.Field{
-// 						Names: []*ast.Ident{ast.NewIdent("f")},
-// 						Type: &ast.FuncType{
-// 							Params: &ast.FieldList{List: []*ast.Field{
-// 								&ast.Field{
-// 									Type: &ast.Ident{Name: "string"},
-// 								},
-// 								&ast.Field{
-// 									Type: &ast.FuncType{
-// 										Params: &ast.FieldList{List: []*ast.Field{
-// 											{
-// 												Names: []*ast.Ident{ast.NewIdent("name")},
-// 												Type:  &ast.Ident{Name: "string"},
-// 											},
-// 										}},
-// 										Results: &ast.FieldList{
-// 											List: []*ast.Field{
-// 												&ast.Field{
-// 													Type: &ast.Ident{Name: "any"},
-// 												},
-// 												&ast.Field{
-// 													Type: &ast.Ident{Name: "error"},
-// 												},
-// 											},
-// 										},
-// 									},
-// 								},
-// 							}},
-// 						},
-// 					},
-// 				},
-// 			},
-// 		},
-// 		Body: bodyBlock,
-// 	})
-//
-// 	return nil
-// }
 
 func (code *Code) genASTNewInstance(file *ast.File, keys []string) error {
 	// var Info__DECL = &infoDecl{}
