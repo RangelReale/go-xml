@@ -899,6 +899,7 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 		Methods: &ast.FieldList{
 			List: []*ast.Field{
 				{
+					Doc: gen.CommentGroup(fmt.Sprintf("abstract type: %s", t.Name.Local)),
 					Names: []*ast.Ident{
 						&ast.Ident{Name: cfg.abstractFunction(t)},
 					},
