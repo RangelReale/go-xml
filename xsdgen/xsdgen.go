@@ -1106,15 +1106,15 @@ func (cfg *Config) genComplexTypeResolveMethod(name string, t *xsd.ComplexType, 
 			continue
 		}
 		if dc.plural {
-			_, _ = body.WriteString(fmt.Sprintf(`for _, item := range t.%s {`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`for itemidx := range t.%s {`, dc.name) + "\n")
 
 			if dc.optional {
-				_, _ = body.WriteString(`if item == nil {` + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s[itemidx] == nil {`, dc.name) + "\n")
 				_, _ = body.WriteString(`continue` + "\n")
 				_, _ = body.WriteString(`}` + "\n")
 			}
 
-			_, _ = body.WriteString(`err = item.Resolve(dif)` + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`err = t.%s[itemidx].Resolve(dif)`, dc.name) + "\n")
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
