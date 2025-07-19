@@ -1102,7 +1102,8 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 func (cfg *Config) genComplexTypeResolveMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
 	var body strings.Builder
 	for _, dc := range decodeConfigs {
-		if dc.op != decodeOpResolve {
+		// if dc.op != decodeOpResolve {
+		if dc.op == decodeOpCopy {
 			continue
 		}
 		if dc.plural {
