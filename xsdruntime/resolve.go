@@ -27,7 +27,7 @@ func (d *FieldResolver[T]) createType(dif *DecoderInstanceFactory) (T, error) {
 		return ctype, err
 	}
 	var et T
-	return et, fmt.Errorf("expected created type to be 'Term' but is %T", instance)
+	return et, fmt.Errorf("expected created type to be '%T' but is '%T'", et, instance)
 }
 
 func (d *FieldResolver[T]) Resolve(dif *DecoderInstanceFactory) error {
