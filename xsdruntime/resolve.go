@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+type Resolver interface {
+	Resolve(dif *DecoderInstanceFactory) (err error)
+}
+
 type FieldResolver[T any] struct {
 	Value      T          `xml:"-"`
 	IsResolved bool       `xml:"-"`

@@ -15,19 +15,13 @@ import (
 
 type DecoderInstanceFactory struct {
 	Namespaces *DecoderNamespace
-	Factories  map[string]InfoDecl
+	Factories  *DecoderFactoryList
 }
 
-func NewDecoderInstanceFactory(namespaces *DecoderNamespace) *DecoderInstanceFactory {
+func NewDecoderInstanceFactory(namespaces *DecoderNamespace, factories *DecoderFactoryList) *DecoderInstanceFactory {
 	return &DecoderInstanceFactory{
 		Namespaces: namespaces,
-		Factories:  make(map[string]InfoDecl),
-	}
-}
-
-func (f *DecoderInstanceFactory) Register(infoDecl ...InfoDecl) {
-	for _, i := range infoDecl {
-		f.Factories[i.Namespace()] = i
+		Factories:  factories,
 	}
 }
 
@@ -46,11 +40,32 @@ func (f *DecoderInstanceFactory) CreateAliased(aliasedName string) (any, error) 
 }
 
 func (f *DecoderInstanceFactory) Create(ns, name string) (any, error) {
-	nsf, ok := f.Factories[ns]
+	nsf, ok := f.Factories.Get(ns)
 	if !ok {
 		return nil, fmt.Errorf("could not find factory for namespace '%s'", ns)
 	}
 	return nsf.NewInstance(name)
+}
+
+type DecoderFactoryList struct {
+	factories map[string]InfoDecl
+}
+
+func NewDecoderFactoryList() *DecoderFactoryList {
+	return &DecoderFactoryList{
+		factories: make(map[string]InfoDecl),
+	}
+}
+
+func (f *DecoderFactoryList) Register(infoDecl ...InfoDecl) {
+	for _, i := range infoDecl {
+		f.factories[i.Namespace()] = i
+	}
+}
+
+func (f *DecoderFactoryList) Get(ns string) (nf InfoDecl, ok bool) {
+	nf, ok = f.factories[ns]
+	return
 }
 
 type DecoderNamespace struct {
