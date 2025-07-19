@@ -40,7 +40,7 @@ func (d *FieldResolver[T]) Resolve(dif *DecoderInstanceFactory) error {
 		return err
 	}
 
-	scontent := dif.Namespaces.WrapNamespacesInXML("root", d.Content)
+	scontent := dif.Namespaces.WrapNamespacesInXML("root", d.Content, d.Attributes...)
 	if err := xml.Unmarshal([]byte(scontent), &instance); err != nil {
 		return err
 	}

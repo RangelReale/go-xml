@@ -90,7 +90,7 @@ func (dn *DecoderNamespace) AliasNamespace(alias string) (v string, ok bool) {
 	return
 }
 
-func (dn *DecoderNamespace) WrapNamespacesInXML(rootElement string, content string) string {
+func (dn *DecoderNamespace) WrapNamespacesInXML(rootElement string, content string, attrs ...xml.Attr) string {
 	var data strings.Builder
 	_, _ = data.WriteString(`<?xml version="1.0" encoding="utf-8"?>` + "\n" + fmt.Sprintf(`<%s`, rootElement))
 	if dn.Root != "" {
@@ -99,6 +99,13 @@ func (dn *DecoderNamespace) WrapNamespacesInXML(rootElement string, content stri
 	for _, nsalias := range slices.Sorted(maps.Keys(dn.Aliases)) {
 		nsname := dn.Aliases[nsalias]
 		_, _ = data.WriteString(fmt.Sprintf(` xmlns:%s="%s"`, nsalias, nsname))
+	}
+	for _, attr := range attrs {
+		if attr.Name.Space == "" {
+			_, _ = data.WriteString(fmt.Sprintf(` %s="%s"`, attr.Name.Local, attr.Value))
+		} else {
+			_, _ = data.WriteString(fmt.Sprintf(` %s:%s="%s"`, attr.Name.Space, attr.Name.Local, attr.Value))
+		}
 	}
 
 	_, _ = data.WriteString(`>` + "\n")
