@@ -1081,6 +1081,12 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			cfg.genComplexTypeResolveMethod(s.name, t, decodeConfigs),
 			cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs),
 		)
+		if t.Abstract {
+			abstractTypeName := cfg.publicType(t, NameTypeAbstract)
+			s.methods = append(s.methods,
+				cfg.genComplexTypeDecodeInterfaceMethod(s.name, abstractTypeName, t, decodeConfigs),
+			)
+		}
 	}
 
 	if len(overrides) > 0 {
@@ -1151,7 +1157,7 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 	_, _ = body.WriteString(fmt.Sprintf(`ret := &dec.%s{}`, name) + "\n")
 	for _, dc := range decodeConfigs {
 		if dc.plural {
-			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n") // TODO
 			continue
 		}
 
@@ -1161,10 +1167,10 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 		case decodeOpDecode:
 			if dc.optional {
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
-				_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode(dif)`, dc.name, dc.name) + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode()`, dc.name, dc.name) + "\n")
 			} else {
 				_, _ = body.WriteString(`{` + "\n")
-				_, _ = body.WriteString(fmt.Sprintf(`decoded, err := t.%s.Decode(dif)`, dc.name) + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`decoded, err := t.%s.Decode()`, dc.name) + "\n")
 			}
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return nil, err` + "\n")
@@ -1173,39 +1179,52 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 				_, _ = body.WriteString(fmt.Sprintf(`ret.%s = *decoded`, dc.name) + "\n")
 			}
 			_, _ = body.WriteString(`}` + "\n")
-			// case decodeOpResolve:
-			// 	_, _ = body.WriteString(`{` + "\n")
-			// 	if dc.optional {
-			// 		_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
-			// 	}
-			// 	_, _ = body.WriteString(fmt.Sprintf(`resolved, err := t.%s.Resolve(dif)`, dc.name) + "\n")
-			// 	_, _ = body.WriteString(`if err != nil {` + "\n")
-			// 	_, _ = body.WriteString(`return nil, err` + "\n")
-			// 	_, _ = body.WriteString(`}` + "\n")
-			// 	if dc.optional {
-			// 		_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = resolved.DecodeInterface()`, dc.name) + "\n")
-			// 	} else {
-			// 		_, _ = body.WriteString(`decoded, err := resolved.DecodeInterface()` + "\n")
-			// 	}
-			// 	_, _ = body.WriteString(`if err != nil {` + "\n")
-			// 	_, _ = body.WriteString(`return nil, err` + "\n")
-			// 	_, _ = body.WriteString(`}` + "\n")
-			// 	if !dc.optional {
-			// 		_, _ = body.WriteString(fmt.Sprintf(`ret.%s = decoded`, dc.name) + "\n") // TODO
-			// 	}
-			// 	if dc.optional {
-			// 		_, _ = body.WriteString(`}` + "\n")
-			// 	}
-			// 	_, _ = body.WriteString(`}` + "\n")
+		case decodeOpResolve:
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
+			} else {
+				_, _ = body.WriteString(`{` + "\n")
+			}
+			_, _ = body.WriteString(fmt.Sprintf(`if !t.%s.IsResolved {`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("%s is not resolved")`, dc.name) + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s.Value != nil {`, dc.name) + "\n")
+			}
+
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Value.DecodeInterface()`, dc.name, dc.name) + "\n")
+			_, _ = body.WriteString(`if err != nil {` + "\n")
+			_, _ = body.WriteString(`return nil, err` + "\n")
+
+			if dc.optional {
+				_, _ = body.WriteString(`}` + "\n")
+			}
+
+			_, _ = body.WriteString(`}` + "\n")
+
+			_, _ = body.WriteString(`}` + "\n")
 		}
 	}
 	_, _ = body.WriteString(`return ret, nil` + "\n")
 
 	return gen.Func("Decode").
 		Receiver("t *"+name).
-		Args("dif *xsdruntime.DecoderInstanceFactory").
 		Body(body.String()).
 		Returns(fmt.Sprintf("_ *dec.%s", name), "err error").
+		MustDecl()
+}
+
+func (cfg *Config) genComplexTypeDecodeInterfaceMethod(name string, abstractName string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
+	var body strings.Builder
+
+	_, _ = body.WriteString(`ret, err = t.Decode()` + "\n")
+	_, _ = body.WriteString(`return` + "\n")
+
+	return gen.Func("DecodeInterface").
+		Receiver("t *"+name).
+		Body(body.String()).
+		Returns(fmt.Sprintf("ret dec.%s", abstractName), "err error").
 		MustDecl()
 }
 
@@ -1227,6 +1246,28 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			},
 		},
 	}
+	if cfg.isDecode {
+		expr.Methods.List = append(expr.Methods.List, &ast.Field{
+			Names: []*ast.Ident{
+				&ast.Ident{Name: "DecodeInterface"},
+			},
+			Type: &ast.FuncType{
+				Results: &ast.FieldList{
+					List: []*ast.Field{
+						&ast.Field{
+							Type: &ast.SelectorExpr{
+								X:   &ast.Ident{Name: "dec"},
+								Sel: &ast.Ident{Name: abstractTypeName},
+							},
+						},
+						&ast.Field{
+							Type: &ast.Ident{Name: "error"},
+						},
+					},
+				},
+			},
+		})
+	}
 
 	ret = append(ret, spec{
 		doc:         t.Doc,
@@ -1241,37 +1282,6 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 		if err != nil {
 			return nil, err
 		}
-
-		// var decoderCreateTypeBody strings.Builder
-		// _, _ = decoderCreateTypeBody.WriteString(`instance, err := dif.CreateAliased(d.XSIType)` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(`if err != nil {` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(`return nil, err` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(`}` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(fmt.Sprintf(`if ctype, ok := instance.(%s); ok {`, abstractTypeName) + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(`return ctype, err` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(`}` + "\n")
-		// _, _ = decoderCreateTypeBody.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("expected created type to be '%s' but is %%T", instance)`, abstractTypeName) + "\n")
-		//
-		// decoderCreateTypeBodyBlock, err := gen.ParseBlock(decoderCreateTypeBody.String())
-		// if err != nil {
-		// 	return nil, err
-		// }
-		//
-		// var decoderResolveBody strings.Builder
-		// _, _ = decoderResolveBody.WriteString(`instance, err := d.createType(dif)` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`if err != nil {` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`return nil, err` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`}` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`scontent := dif.Namespaces.WrapNamespacesInXML("root", d.Content)` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`if err := xml.Unmarshal([]byte(scontent), &instance); err != nil {` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`return nil, err` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`}` + "\n")
-		// _, _ = decoderResolveBody.WriteString(`return instance, nil` + "\n")
-		//
-		// decoderResolveBodyBlock, err := gen.ParseBlock(decoderResolveBody.String())
-		// if err != nil {
-		// 	return nil, err
-		// }
 
 		decoderTypeName := cfg.publicType(t, NameTypeResolver)
 
@@ -1289,78 +1299,6 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			},
 			isAlias: true,
 			xsdType: t,
-			// methods: []*ast.FuncDecl{
-			// 	&ast.FuncDecl{
-			// 		Name: ast.NewIdent("createType"),
-			// 		Recv: &ast.FieldList{
-			// 			List: []*ast.Field{
-			// 				&ast.Field{
-			// 					Names: []*ast.Ident{ast.NewIdent("d")},
-			// 					Type:  &ast.UnaryExpr{Op: token.MUL, X: ast.NewIdent(decoderTypeName)},
-			// 				},
-			// 			},
-			// 		},
-			// 		Type: &ast.FuncType{
-			// 			Params: &ast.FieldList{
-			// 				List: []*ast.Field{
-			// 					&ast.Field{
-			// 						Names: []*ast.Ident{ast.NewIdent("dif")},
-			// 						Type: &ast.UnaryExpr{Op: token.MUL, X: &ast.SelectorExpr{
-			// 							X:   ast.NewIdent("xsdruntime"),
-			// 							Sel: ast.NewIdent("DecoderInstanceFactory"),
-			// 						}},
-			// 					},
-			// 				},
-			// 			},
-			// 			Results: &ast.FieldList{
-			// 				List: []*ast.Field{
-			// 					&ast.Field{
-			// 						Type: valueExpr,
-			// 					},
-			// 					&ast.Field{
-			// 						Type: ast.NewIdent("error"),
-			// 					},
-			// 				},
-			// 			},
-			// 		},
-			// 		Body: decoderCreateTypeBodyBlock,
-			// 	},
-			// 	&ast.FuncDecl{
-			// 		Name: ast.NewIdent("Resolve"),
-			// 		Recv: &ast.FieldList{
-			// 			List: []*ast.Field{
-			// 				&ast.Field{
-			// 					Names: []*ast.Ident{ast.NewIdent("d")},
-			// 					Type:  &ast.UnaryExpr{Op: token.MUL, X: ast.NewIdent(decoderTypeName)},
-			// 				},
-			// 			},
-			// 		},
-			// 		Type: &ast.FuncType{
-			// 			Params: &ast.FieldList{
-			// 				List: []*ast.Field{
-			// 					&ast.Field{
-			// 						Names: []*ast.Ident{ast.NewIdent("dif")},
-			// 						Type: &ast.UnaryExpr{Op: token.MUL, X: &ast.SelectorExpr{
-			// 							X:   ast.NewIdent("xsdruntime"),
-			// 							Sel: ast.NewIdent("DecoderInstanceFactory"),
-			// 						}},
-			// 					},
-			// 				},
-			// 			},
-			// 			Results: &ast.FieldList{
-			// 				List: []*ast.Field{
-			// 					&ast.Field{
-			// 						Type: valueExpr,
-			// 					},
-			// 					&ast.Field{
-			// 						Type: ast.NewIdent("error"),
-			// 					},
-			// 				},
-			// 			},
-			// 		},
-			// 		Body: decoderResolveBodyBlock,
-			// 	},
-			// },
 		}
 
 		ret = append(ret, decoderSpec)
