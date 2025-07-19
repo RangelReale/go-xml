@@ -1245,14 +1245,23 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			return nil, err
 		}
 
-		decoderTypeName := cfg.publicType(t, NameTypeDecoder)
+		decoderTypeName := cfg.publicType(t, NameTypeResolver)
 
 		decoderSpec := spec{
 			doc:  t.Doc,
 			name: decoderTypeName,
-			expr: &ast.SelectorExpr{
-				X:   ast.NewIdent("xsdruntime"),
-				Sel: ast.NewIdent("FieldDecoder"),
+			// expr: &ast.SelectorExpr{
+			// 	X:   ast.NewIdent("xsdruntime"),
+			// 	Sel: ast.NewIdent("FieldResolver"),
+			// },
+			expr: &ast.IndexExpr{
+				X: &ast.SelectorExpr{
+					X:   ast.NewIdent("xsdruntime"),
+					Sel: ast.NewIdent("FieldResolver"),
+				},
+				Lbrack: 0,
+				Index:  valueExpr,
+				Rbrack: 0,
 			},
 			xsdType: t,
 			methods: []*ast.FuncDecl{

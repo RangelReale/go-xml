@@ -13,7 +13,9 @@ import (
 // 	T // not allowed by Go
 // }
 
-type FieldDecoder struct {
+type FieldResolver[T any] struct {
+	Value      T          `xml:"-"`
+	IsResolved bool       `xml:"-"`
 	XSIType    string     `xml:"http://www.w3.org/2001/XMLSchema-instance type,attr"`
 	Attributes []xml.Attr `xml:",any,attr"`
 	Content    string     `xml:",innerxml"`

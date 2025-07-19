@@ -539,7 +539,7 @@ const (
 	NameTypeGeneral  NameType = iota
 	NameTypeAbstract NameType = iota
 	NameTypeImpl
-	NameTypeDecoder
+	NameTypeResolver
 )
 
 func (cfg *Config) public(name xml.Name) string {
@@ -560,8 +560,8 @@ func (cfg *Config) publicComplex(t *xsd.ComplexType, nameType NameType) string {
 	name := cfg.public(t.Name)
 	if t.Abstract && nameType == NameTypeImpl {
 		return name + "__Impl"
-	} else if cfg.isDecode && (nameType == NameTypeDecoder || (t.Abstract && nameType == NameTypeGeneral)) {
-		return name + "__Decoder"
+	} else if cfg.isDecode && (nameType == NameTypeResolver || (t.Abstract && nameType == NameTypeGeneral)) {
+		return name + "__Resolver"
 	} else {
 		return name
 	}
