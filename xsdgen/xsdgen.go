@@ -1111,14 +1111,18 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 		case decodeOpDecode:
 			if dc.optional {
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode(dif)`, dc.name, dc.name) + "\n")
+			} else {
+				_, _ = body.WriteString(`{` + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`decoded, err := t.%s.Decode(dif)`, dc.name) + "\n")
 			}
-			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode(dif)`, dc.name, dc.name) + "\n")
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return nil, err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
-			if dc.optional {
-				_, _ = body.WriteString(`}` + "\n")
+			if !dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s = *decoded`, dc.name) + "\n")
 			}
+			_, _ = body.WriteString(`}` + "\n")
 		case decodeOpResolve:
 			if dc.optional {
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
