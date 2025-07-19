@@ -1102,16 +1102,28 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 func (cfg *Config) genComplexTypeResolveMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
 	var body strings.Builder
 	for _, dc := range decodeConfigs {
-		// if dc.op != decodeOpResolve {
 		if dc.op == decodeOpCopy {
 			continue
 		}
 		if dc.plural {
-			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`for _, item := range t.%s {`, dc.name) + "\n")
+
+			if dc.optional {
+				_, _ = body.WriteString(`if item == nil {` + "\n")
+				_, _ = body.WriteString(`continue` + "\n")
+				_, _ = body.WriteString(`}` + "\n")
+			}
+
+			_, _ = body.WriteString(`err = item.Resolve(dif)` + "\n")
+			_, _ = body.WriteString(`if err != nil {` + "\n")
+			_, _ = body.WriteString(`return err` + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+
+			_, _ = body.WriteString(`}` + "\n")
+
 			continue
 		}
 
-		// _, _ = body.WriteString(`{` + "\n")
 		if dc.optional {
 			_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
 		}
@@ -1122,7 +1134,6 @@ func (cfg *Config) genComplexTypeResolveMethod(name string, t *xsd.ComplexType, 
 		if dc.optional {
 			_, _ = body.WriteString(`}` + "\n")
 		}
-		// _, _ = body.WriteString(`}` + "\n")
 	}
 	_, _ = body.WriteString(`return nil` + "\n")
 
