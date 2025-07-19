@@ -6,7 +6,7 @@ import (
 	"slices"
 )
 
-func Load[T Resolver](r io.Reader, factories *DecoderFactoryList) (T, error) {
+func Load[T Resolver](r io.Reader, factories *InstanceFactory) (T, error) {
 	l := &loadType[T]{}
 	if err := xml.NewDecoder(r).Decode(l); err != nil {
 		var el T
