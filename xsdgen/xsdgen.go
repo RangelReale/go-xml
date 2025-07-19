@@ -278,13 +278,18 @@ func (code *Code) GenAST() (*ast.File, error) {
 	sort.Strings(keys)
 	for _, name := range keys {
 		info := code.decls[name]
+		var assign token.Pos
+		if info.isAlias {
+			assign = 1
+		}
 		typeDecl := &ast.GenDecl{
 			Doc: gen.CommentGroup(info.doc),
 			Tok: token.TYPE,
 			Specs: []ast.Spec{
 				&ast.TypeSpec{
-					Name: ast.NewIdent(name),
-					Type: info.expr,
+					Name:   ast.NewIdent(name),
+					Type:   info.expr,
+					Assign: assign,
 				},
 			},
 		}
@@ -433,6 +438,7 @@ type spec struct {
 	expr        ast.Expr
 	private     bool
 	isInterface bool
+	isAlias     bool
 	enumValues  []string
 	methods     []*ast.FuncDecl
 	xsdType     xsd.Type
@@ -901,6 +907,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 
 	b, ok := t.Base.(*xsd.ComplexType)
 	if ok {
+		// add base type
 		bident, err := cfg.exprName(b, NameTypeImpl)
 		if err != nil {
 			return nil, fmt.Errorf("%s base type %s: %v")
@@ -911,8 +918,9 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		})
 		dname := cfg.publicType(b, NameTypeImpl)
 		decodeConfigs = append(decodeConfigs, decodeConfig{
-			name: dname,
-			op:   decodeOpCopy,
+			name:     dname,
+			op:       decodeOpDecode,
+			optional: true,
 		})
 	}
 
@@ -946,16 +954,27 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		if el.Plural {
 			base = &ast.ArrayType{Elt: base}
 		}
+		fieldOptional := optional && !el.Plural && cfg.isOptional(el.Type)
 		fields = append(fields, gen.StructArg{
 			Doc:      el.Doc,
 			Name:     name,
 			Typ:      base,
 			Tag:      gen.String(tag),
-			Optional: optional && !el.Plural && cfg.isOptional(el.Type),
+			Optional: fieldOptional,
 		})
+		dop := decodeOpCopy
+		if etyp, isComplex := el.Type.(*xsd.ComplexType); isComplex {
+			if etyp.Abstract {
+				dop = decodeOpResolve
+			} else {
+				dop = decodeOpDecode
+			}
+		}
 		decodeConfigs = append(decodeConfigs, decodeConfig{
-			name: elName,
-			op:   decodeOpCopy,
+			name:     elName,
+			op:       dop,
+			optional: fieldOptional,
+			plural:   el.Plural,
 		})
 
 		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
@@ -1002,6 +1021,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		cfg.debugf("adding %s attribute %s as %v", t.Name.Local, attr.Name.Local, base)
 		atName := namegen.attributeName(attr.Name)
 		var name ast.Expr = ast.NewIdent(atName)
+		fieldOptional := attr.Optional && cfg.isOptional(attr.Type)
 		fields = append(fields, gen.StructArg{
 			Doc:      attr.Doc,
 			Name:     name,
@@ -1010,8 +1030,9 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Optional: attr.Optional && cfg.isOptional(attr.Type),
 		})
 		decodeConfigs = append(decodeConfigs, decodeConfig{
-			name: atName,
-			op:   decodeOpCopy,
+			name:     atName,
+			op:       decodeOpCopy,
+			optional: fieldOptional,
 		})
 
 		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
@@ -1078,43 +1099,82 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
 	var body strings.Builder
 	_, _ = body.WriteString(fmt.Sprintf(`ret := &dec.%s{}`, name) + "\n")
-	// for _, dc := range decodeConfigs {
-	// 	_, _ = body.WriteString(fmt.Sprintf(`ret.%s = t.%s`, dc.name, dc.name) + "\n")
-	// }
+	for _, dc := range decodeConfigs {
+		if dc.plural {
+			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n")
+			continue
+		}
+
+		switch dc.op {
+		case decodeOpCopy:
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s = t.%s`, dc.name, dc.name) + "\n")
+		case decodeOpDecode:
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
+			}
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode(dif)`, dc.name, dc.name) + "\n")
+			_, _ = body.WriteString(`if err != nil {` + "\n")
+			_, _ = body.WriteString(`return nil, err` + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+			if dc.optional {
+				_, _ = body.WriteString(`}` + "\n")
+			}
+		case decodeOpResolve:
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
+			}
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Resolve(dif)`, dc.name, dc.name) + "\n")
+			_, _ = body.WriteString(`if err != nil {` + "\n")
+			_, _ = body.WriteString(`return nil, err` + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+			if dc.optional {
+				_, _ = body.WriteString(`}` + "\n")
+			}
+		}
+	}
 	_, _ = body.WriteString(`return ret, nil` + "\n")
 
 	return gen.Func("Decode").
 		Receiver("t *"+name).
 		Args("dif *xsdruntime.DecoderInstanceFactory").
 		Body(body.String()).
-		Returns(fmt.Sprintf("*dec.%s", name), "error").
+		Returns(fmt.Sprintf("_ *dec.%s", name), "err error").
 		MustDecl()
 }
 
 func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 	var ret []spec
 
-	expr := &ast.InterfaceType{
-		Methods: &ast.FieldList{
-			List: []*ast.Field{
-				{
-					Doc: gen.CommentGroup(fmt.Sprintf("abstract type: %s", t.Name.Local)),
-					Names: []*ast.Ident{
-						&ast.Ident{Name: cfg.abstractFunction(t)},
+	abstractTypeName := cfg.publicType(t, NameTypeAbstract)
+
+	var expr ast.Expr
+	if !cfg.isDecode {
+		expr = &ast.InterfaceType{
+			Methods: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Doc: gen.CommentGroup(fmt.Sprintf("abstract type: %s", t.Name.Local)),
+						Names: []*ast.Ident{
+							&ast.Ident{Name: cfg.abstractFunction(t)},
+						},
+						Type: &ast.FuncType{},
 					},
-					Type: &ast.FuncType{},
 				},
 			},
-		},
+		}
+	} else {
+		expr = &ast.SelectorExpr{
+			X:   &ast.Ident{Name: "dec"},
+			Sel: &ast.Ident{Name: abstractTypeName},
+		}
 	}
-
-	abstractTypeName := cfg.publicType(t, NameTypeAbstract)
 
 	ret = append(ret, spec{
 		doc:         t.Doc,
 		name:        abstractTypeName,
 		expr:        expr,
 		isInterface: true,
+		isAlias:     cfg.isDecode,
 		xsdType:     t,
 	})
 
@@ -1160,15 +1220,6 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 		decoderSpec := spec{
 			doc:  t.Doc,
 			name: decoderTypeName,
-			// expr: &ast.IndexExpr{
-			// 	X: &ast.SelectorExpr{
-			// 		X:   ast.NewIdent("xsdruntime"),
-			// 		Sel: ast.NewIdent("FieldDecoder"),
-			// 	},
-			// 	Lbrack: 0,
-			// 	Index:  valueExpr,
-			// 	Rbrack: 0,
-			// },
 			expr: &ast.SelectorExpr{
 				X:   ast.NewIdent("xsdruntime"),
 				Sel: ast.NewIdent("FieldDecoder"),
@@ -1646,9 +1697,12 @@ type decodeOp int
 const (
 	decodeOpCopy decodeOp = iota
 	decodeOpDecode
+	decodeOpResolve
 )
 
 type decodeConfig struct {
-	name string
-	op   decodeOp
+	name     string
+	op       decodeOp
+	optional bool
+	plural   bool
 }
