@@ -1394,10 +1394,23 @@ func (cfg *Config) genSimpleType(t *xsd.SimpleType) ([]spec, error) {
 		})
 		return result, nil
 	}
-	base, err := cfg.exprName(t.Base, NameTypeImpl)
-	if err != nil {
-		return nil, fmt.Errorf("simpleType %s: base type %s: %v",
-			t.Name.Local, xsd.XMLName(t.Base).Local, err)
+
+	var base ast.Expr
+	isAlias := false
+
+	if !cfg.isDecode {
+		var err error
+		base, err = cfg.exprName(t.Base, NameTypeImpl)
+		if err != nil {
+			return nil, fmt.Errorf("simpleType %s: base type %s: %v",
+				t.Name.Local, xsd.XMLName(t.Base).Local, err)
+		}
+	} else {
+		base = &ast.SelectorExpr{
+			X:   ast.NewIdent("dec"),
+			Sel: ast.NewIdent(cfg.public(t.Name)),
+		}
+		isAlias = true
 	}
 
 	spec, err := cfg.addSpecMethods(spec{
@@ -1405,6 +1418,7 @@ func (cfg *Config) genSimpleType(t *xsd.SimpleType) ([]spec, error) {
 		name:    cfg.public(t.Name),
 		expr:    base,
 		xsdType: t,
+		isAlias: isAlias,
 	})
 	if err != nil {
 		return result, err
