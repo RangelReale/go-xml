@@ -8,11 +8,6 @@ import (
 	"strings"
 )
 
-// type RootDecoder[T any] struct {
-// 	Attrs []xml.Attr `xml:",any,attr"`
-// 	T // not allowed by Go
-// }
-
 type DecoderInstanceFactory struct {
 	Namespaces *DecoderNamespace
 	Factories  *DecoderFactoryList
@@ -28,7 +23,7 @@ func NewDecoderInstanceFactory(namespaces *DecoderNamespace, factories *DecoderF
 func (f *DecoderInstanceFactory) CreateAliased(aliasedName string) (any, error) {
 	alias, name, found := strings.Cut(aliasedName, ":")
 	if !found {
-		return nil, fmt.Errorf("name does not have an alias: %s", aliasedName)
+		return f.Create(f.Namespaces.Root, aliasedName)
 	}
 
 	ns, ok := f.Namespaces.AliasNamespace(alias)

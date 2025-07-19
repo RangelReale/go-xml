@@ -1226,35 +1226,13 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 			},
 		},
 	}
-	if cfg.isDecode {
-		// DecodeInterface() (ITF, error)
-		expr.Methods.List = append(expr.Methods.List, &ast.Field{
-			Names: []*ast.Ident{ast.NewIdent("DecodeInterface")},
-			Type: &ast.FuncType{
-				Results: &ast.FieldList{
-					List: []*ast.Field{
-						&ast.Field{
-							Type: &ast.SelectorExpr{
-								X:   ast.NewIdent("dec"),
-								Sel: ast.NewIdent(abstractTypeName),
-							},
-						},
-						&ast.Field{
-							Type: ast.NewIdent("error"),
-						},
-					},
-				},
-			},
-		})
-	}
 
 	ret = append(ret, spec{
 		doc:         t.Doc,
 		name:        abstractTypeName,
 		expr:        expr,
 		isInterface: true,
-		// isAlias:     cfg.isDecode,
-		xsdType: t,
+		xsdType:     t,
 	})
 
 	if cfg.isDecode {
