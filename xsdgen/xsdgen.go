@@ -1081,12 +1081,6 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			cfg.genComplexTypeResolveMethod(s.name, t, decodeConfigs),
 			cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs),
 		)
-		if t.Abstract {
-			abstractTypeName := cfg.publicType(t, NameTypeAbstract)
-			s.methods = append(s.methods,
-				cfg.genComplexTypeDecodeInterfaceMethod(s.name, abstractTypeName, t, decodeConfigs),
-			)
-		}
 	}
 
 	if len(overrides) > 0 {
@@ -1193,9 +1187,24 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s.Value != nil {`, dc.name) + "\n")
 			}
 
-			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Value.DecodeInterface()`, dc.name, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := t.%s.Value.(interface{`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`Decode() (dec.%s, error)`, dc.name) + "\n")
+			_, _ = body.WriteString(`}); ok {` + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = itemDec.Decode()`, dc.name) + "\n")
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return nil, err` + "\n")
+			_, _ = body.WriteString(`} else {` + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+
+			// if itemDec, ok := item.(interface{
+			// 	DecodeInterface() (dec.Variable, error)
+			// }); ok {
+			// 	ret.Variable, err = itemDec.DecodeInterface()
+			// 	if err != nil {
+			// 		return nil, err
+			// 	}
+			// }
 
 			if dc.optional {
 				_, _ = body.WriteString(`}` + "\n")
@@ -1212,19 +1221,6 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 		Receiver("t *"+name).
 		Body(body.String()).
 		Returns(fmt.Sprintf("_ *dec.%s", name), "err error").
-		MustDecl()
-}
-
-func (cfg *Config) genComplexTypeDecodeInterfaceMethod(name string, abstractName string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
-	var body strings.Builder
-
-	_, _ = body.WriteString(`ret, err = t.Decode()` + "\n")
-	_, _ = body.WriteString(`return` + "\n")
-
-	return gen.Func("DecodeInterface").
-		Receiver("t *"+name).
-		Body(body.String()).
-		Returns(fmt.Sprintf("ret dec.%s", abstractName), "err error").
 		MustDecl()
 }
 
@@ -1245,28 +1241,6 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 				},
 			},
 		},
-	}
-	if cfg.isDecode {
-		expr.Methods.List = append(expr.Methods.List, &ast.Field{
-			Names: []*ast.Ident{
-				&ast.Ident{Name: "DecodeInterface"},
-			},
-			Type: &ast.FuncType{
-				Results: &ast.FieldList{
-					List: []*ast.Field{
-						&ast.Field{
-							Type: &ast.SelectorExpr{
-								X:   &ast.Ident{Name: "dec"},
-								Sel: &ast.Ident{Name: abstractTypeName},
-							},
-						},
-						&ast.Field{
-							Type: &ast.Ident{Name: "error"},
-						},
-					},
-				},
-			},
-		})
 	}
 
 	ret = append(ret, spec{
