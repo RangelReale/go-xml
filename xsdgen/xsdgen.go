@@ -1076,7 +1076,10 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 
 	if cfg.isDecode {
-		s.methods = append(s.methods, cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs))
+		s.methods = append(s.methods,
+			cfg.genComplexTypeResolveMethod(s.name, t, decodeConfigs),
+			cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs),
+		)
 	}
 
 	if len(overrides) > 0 {
@@ -1094,6 +1097,40 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 	}
 	result = append(result, s)
 	return result, nil
+}
+
+func (cfg *Config) genComplexTypeResolveMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
+	var body strings.Builder
+	for _, dc := range decodeConfigs {
+		if dc.op != decodeOpResolve {
+			continue
+		}
+		if dc.plural {
+			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n")
+			continue
+		}
+
+		// _, _ = body.WriteString(`{` + "\n")
+		if dc.optional {
+			_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
+		}
+		_, _ = body.WriteString(fmt.Sprintf(`err = t.%s.Resolve(dif)`, dc.name) + "\n")
+		_, _ = body.WriteString(`if err != nil {` + "\n")
+		_, _ = body.WriteString(`return err` + "\n")
+		_, _ = body.WriteString(`}` + "\n")
+		if dc.optional {
+			_, _ = body.WriteString(`}` + "\n")
+		}
+		// _, _ = body.WriteString(`}` + "\n")
+	}
+	_, _ = body.WriteString(`return nil` + "\n")
+
+	return gen.Func("Resolve").
+		Receiver("t *" + name).
+		Args("dif *xsdruntime.DecoderInstanceFactory").
+		Body(body.String()).
+		Returns("err error").
+		MustDecl()
 }
 
 func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
