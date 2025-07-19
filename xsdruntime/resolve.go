@@ -46,6 +46,12 @@ func (d *FieldResolver[T]) Resolve(dif *DecoderInstanceFactory) error {
 	}
 
 	d.Value = instance
+	if valueResolver, ok := any(d.Value).(Resolver); ok {
+		err = valueResolver.Resolve(dif)
+		if err != nil {
+			return err
+		}
+	}
 	d.IsResolved = true
 
 	return nil
