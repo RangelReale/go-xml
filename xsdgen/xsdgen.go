@@ -1108,13 +1108,23 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 		switch dc.op {
 		case decodeOpCopy:
 			_, _ = body.WriteString(fmt.Sprintf(`ret.%s = t.%s`, dc.name, dc.name) + "\n")
-		case decodeOpDecode:
+		case decodeOpDecode, decodeOpResolve:
+			_, _ = body.WriteString(`{` + "\n")
 			if dc.optional {
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
-				_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode(dif)`, dc.name, dc.name) + "\n")
+			}
+			sourceVar := fmt.Sprintf("t.%s", dc.name)
+			if dc.op == decodeOpResolve {
+				_, _ = body.WriteString(fmt.Sprintf(`resolved, err := t.%s.Resolve(dif)`, dc.name) + "\n")
+				_, _ = body.WriteString(`if err != nil {` + "\n")
+				_, _ = body.WriteString(`return nil, err` + "\n")
+				_, _ = body.WriteString(`}` + "\n")
+				sourceVar = "resolved"
+			}
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = %s.Decode(dif)`, dc.name, sourceVar) + "\n")
 			} else {
-				_, _ = body.WriteString(`{` + "\n")
-				_, _ = body.WriteString(fmt.Sprintf(`decoded, err := t.%s.Decode(dif)`, dc.name) + "\n")
+				_, _ = body.WriteString(fmt.Sprintf(`decoded, err := %s.Decode(dif)`, sourceVar) + "\n")
 			}
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return nil, err` + "\n")
@@ -1122,18 +1132,10 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 			if !dc.optional {
 				_, _ = body.WriteString(fmt.Sprintf(`ret.%s = *decoded`, dc.name) + "\n")
 			}
-			_, _ = body.WriteString(`}` + "\n")
-		case decodeOpResolve:
-			if dc.optional {
-				_, _ = body.WriteString(fmt.Sprintf(`if t.%s != nil {`, dc.name) + "\n")
-			}
-			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Resolve(dif)`, dc.name, dc.name) + "\n")
-			_, _ = body.WriteString(`if err != nil {` + "\n")
-			_, _ = body.WriteString(`return nil, err` + "\n")
-			_, _ = body.WriteString(`}` + "\n")
 			if dc.optional {
 				_, _ = body.WriteString(`}` + "\n")
 			}
+			_, _ = body.WriteString(`}` + "\n")
 		}
 	}
 	_, _ = body.WriteString(`return ret, nil` + "\n")
@@ -1152,34 +1154,34 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 	abstractTypeName := cfg.publicType(t, NameTypeAbstract)
 
 	var expr ast.Expr
-	if !cfg.isDecode {
-		expr = &ast.InterfaceType{
-			Methods: &ast.FieldList{
-				List: []*ast.Field{
-					{
-						Doc: gen.CommentGroup(fmt.Sprintf("abstract type: %s", t.Name.Local)),
-						Names: []*ast.Ident{
-							&ast.Ident{Name: cfg.abstractFunction(t)},
-						},
-						Type: &ast.FuncType{},
+	// if !cfg.isDecode {
+	expr = &ast.InterfaceType{
+		Methods: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Doc: gen.CommentGroup(fmt.Sprintf("abstract type: %s", t.Name.Local)),
+					Names: []*ast.Ident{
+						&ast.Ident{Name: cfg.abstractFunction(t)},
 					},
+					Type: &ast.FuncType{},
 				},
 			},
-		}
-	} else {
-		expr = &ast.SelectorExpr{
-			X:   &ast.Ident{Name: "dec"},
-			Sel: &ast.Ident{Name: abstractTypeName},
-		}
+		},
 	}
+	// } else {
+	// 	expr = &ast.SelectorExpr{
+	// 		X:   &ast.Ident{Name: "dec"},
+	// 		Sel: &ast.Ident{Name: abstractTypeName},
+	// 	}
+	// }
 
 	ret = append(ret, spec{
 		doc:         t.Doc,
 		name:        abstractTypeName,
 		expr:        expr,
 		isInterface: true,
-		isAlias:     cfg.isDecode,
-		xsdType:     t,
+		// isAlias:     cfg.isDecode,
+		xsdType: t,
 	})
 
 	if cfg.isDecode {
