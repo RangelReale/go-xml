@@ -387,6 +387,7 @@ func flattenRef(schema []*xmltree.Element) error {
 			depends.Add(id, dep)
 		}
 	}
+	var flattened []*xmltree.Element
 	depends.Flatten(func(id int) {
 		el := index.eltByID[id]
 		if el.Attr("", "ref") == "" {
@@ -398,12 +399,19 @@ func flattenRef(schema []*xmltree.Element) error {
 			panic("bug building dep tree; missing " + el.Attr("", "ref"))
 		}
 		*el = *deref(el, real)
+		flattened = append(flattened, el)
 	})
 	for ns, doc := range schema {
-		unpackGroups(doc)
+		// unpackGroups(doc)
 		if hasCycle(doc, nil) {
 			return fmt.Errorf("cycle detected after flattening references "+
 				"in schema %d:\n%s", ns, xmltree.MarshalIndent(doc, "", "  "))
+		}
+	}
+	if len(flattened) > 0 {
+		err := flattenRef(flattened)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
