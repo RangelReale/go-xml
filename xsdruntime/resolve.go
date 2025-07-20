@@ -9,7 +9,7 @@ type Resolver interface {
 	Resolve(dif *DecoderInstanceFactory) (err error)
 }
 
-type FieldResolver[T any] struct {
+type FieldResolver[T, DECT any] struct {
 	Value      T          `xml:"-"`
 	IsResolved bool       `xml:"-"`
 	XSIType    string     `xml:"http://www.w3.org/2001/XMLSchema-instance type,attr"`
@@ -17,7 +17,7 @@ type FieldResolver[T any] struct {
 	Content    string     `xml:",innerxml"`
 }
 
-func (d *FieldResolver[T]) createType(dif *DecoderInstanceFactory) (T, error) {
+func (d *FieldResolver[T, DECT]) createType(dif *DecoderInstanceFactory) (T, error) {
 	instance, err := dif.CreateAliased(d.XSIType)
 	if err != nil {
 		var et T
@@ -30,7 +30,7 @@ func (d *FieldResolver[T]) createType(dif *DecoderInstanceFactory) (T, error) {
 	return et, fmt.Errorf("expected created type to be '%T' but is '%T'", et, instance)
 }
 
-func (d *FieldResolver[T]) Resolve(dif *DecoderInstanceFactory) error {
+func (d *FieldResolver[T, DECT]) Resolve(dif *DecoderInstanceFactory) error {
 	if d.IsResolved {
 		return nil
 	}
@@ -55,4 +55,22 @@ func (d *FieldResolver[T]) Resolve(dif *DecoderInstanceFactory) error {
 	d.IsResolved = true
 
 	return nil
+}
+
+func (d *FieldResolver[T, DECT]) Decode() (DECT, error) {
+	var errT DECT
+	if !d.IsResolved {
+		return errT, fmt.Errorf("field is not resolved")
+	}
+	itemDec, ok := any(d.Value).(interface {
+		Decode() (DECT, error)
+	})
+	if !ok {
+		return errT, fmt.Errorf("field does not implement Decode for the expected type")
+	}
+	dec, err := itemDec.Decode()
+	if err != nil {
+		return errT, err
+	}
+	return dec, nil
 }

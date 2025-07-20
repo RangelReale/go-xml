@@ -1199,21 +1199,26 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 				_, _ = body.WriteString(fmt.Sprintf(`if t.%s.Value != nil {`, dc.name) + "\n")
 			}
 
-			_, _ = body.WriteString(fmt.Sprintf(`decAny, ok := t.%s.Value.(xsdruntime.DecoderAny)`, dc.name) + "\n")
-			_, _ = body.WriteString(`if !ok {` + "\n")
-			_, _ = body.WriteString(`return nil, fmt.Errorf("resolved item don't implement 'xsdruntime.DecoderAny'")` + "\n")
-			_, _ = body.WriteString(`}` + "\n")
-
-			_, _ = body.WriteString(`decoded, err := decAny.DecodeAny()` + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`ret.%s, err = t.%s.Decode()`, dc.name, dc.name) + "\n")
 			_, _ = body.WriteString(`if err != nil {` + "\n")
 			_, _ = body.WriteString(`return nil, err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
 
-			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(%s); ok {`, dc.typ) + "\n")
-			_, _ = body.WriteString(fmt.Sprintf(`ret.%s = itemDec`, dc.name) + "\n")
-			_, _ = body.WriteString(`} else {` + "\n")
-			_, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
-			_, _ = body.WriteString(`}` + "\n")
+			// _, _ = body.WriteString(fmt.Sprintf(`decAny, ok := t.%s.Value.(xsdruntime.DecoderAny)`, dc.name) + "\n")
+			// _, _ = body.WriteString(`if !ok {` + "\n")
+			// _, _ = body.WriteString(`return nil, fmt.Errorf("resolved item don't implement 'xsdruntime.DecoderAny'")` + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
+			//
+			// _, _ = body.WriteString(`decoded, err := decAny.DecodeAny()` + "\n")
+			// _, _ = body.WriteString(`if err != nil {` + "\n")
+			// _, _ = body.WriteString(`return nil, err` + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
+			//
+			// _, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(%s); ok {`, dc.typ) + "\n")
+			// _, _ = body.WriteString(fmt.Sprintf(`ret.%s = itemDec`, dc.name) + "\n")
+			// _, _ = body.WriteString(`} else {` + "\n")
+			// _, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
 
 			if dc.optional {
 				_, _ = body.WriteString(`}` + "\n")
@@ -1276,20 +1281,25 @@ func (cfg *Config) genComplexTypeAbstract(t *xsd.ComplexType) ([]spec, error) {
 		if err != nil {
 			return nil, err
 		}
+		valueTyp := cfg.publicType(t, NameTypeAbstract)
+		valueDecExpr := &ast.SelectorExpr{
+			X:   ast.NewIdent("dec"),
+			Sel: ast.NewIdent(valueTyp),
+		}
 
 		decoderTypeName := cfg.publicType(t, NameTypeResolver)
 
 		decoderSpec := spec{
 			doc:  t.Doc,
 			name: decoderTypeName,
-			expr: &ast.IndexExpr{
+			expr: &ast.IndexListExpr{
 				X: &ast.SelectorExpr{
 					X:   ast.NewIdent("xsdruntime"),
 					Sel: ast.NewIdent("FieldResolver"),
 				},
-				Lbrack: 0,
-				Index:  valueExpr,
-				Rbrack: 0,
+				Lbrack:  0,
+				Indices: []ast.Expr{valueExpr, valueDecExpr},
+				Rbrack:  0,
 			},
 			isAlias: true,
 			xsdType: t,
