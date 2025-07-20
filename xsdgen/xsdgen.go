@@ -1083,6 +1083,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		s.methods = append(s.methods,
 			cfg.genComplexTypeResolveMethod(s.name, t, decodeConfigs),
 			cfg.genComplexTypeDecodeMethod(s.name, t, decodeConfigs),
+			cfg.genComplexTypeDecodeAnyMethod(s.name, t, decodeConfigs),
 		)
 	}
 
@@ -1215,6 +1216,22 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 			_, _ = body.WriteString(`return nil, err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
 
+			// _, _ = body.WriteString(fmt.Sprintf(`decAny, ok := t.%s.Value.(xsdruntime.DecoderAny)`, dc.name) + "\n")
+			// _, _ = body.WriteString(`if !ok {` + "\n")
+			// _, _ = body.WriteString(`return nil, fmt.Errorf("resolved item don't implement 'xsdruntime.DecoderAny'")` + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
+			//
+			// _, _ = body.WriteString(`decoded, err := decAny.DecodeAny()` + "\n")
+			// _, _ = body.WriteString(`if err != nil {` + "\n")
+			// _, _ = body.WriteString(`return nil, err` + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
+			//
+			// _, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(%s); ok {`, dc.typ) + "\n")
+			// _, _ = body.WriteString(fmt.Sprintf(`ret.%s = itemDec`, dc.name) + "\n")
+			// _, _ = body.WriteString(`} else {` + "\n")
+			// _, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
+			// _, _ = body.WriteString(`}` + "\n")
+
 			if dc.optional {
 				_, _ = body.WriteString(`}` + "\n")
 			}
@@ -1228,6 +1245,19 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 		Receiver("t *"+name).
 		Body(body.String()).
 		Returns(fmt.Sprintf("_ *dec.%s", name), "err error").
+		MustDecl()
+}
+
+func (cfg *Config) genComplexTypeDecodeAnyMethod(name string, t *xsd.ComplexType, decodeConfigs []decodeConfig) *ast.FuncDecl {
+	var body strings.Builder
+
+	_, _ = body.WriteString(`ret, err = t.Decode()` + "\n")
+	_, _ = body.WriteString(`return` + "\n")
+
+	return gen.Func("DecodeAny").
+		Receiver("t *"+name).
+		Body(body.String()).
+		Returns("ret any", "err error").
 		MustDecl()
 }
 
