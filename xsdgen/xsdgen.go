@@ -940,7 +940,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		elName := namegen.elementName(el.Name)
 		var name ast.Expr = ast.NewIdent(elName)
 		if el.Wildcard {
-			tag = `xml:",any"`
+			tag = `xml:",chardata"`
 			if el.Plural {
 				name = ast.NewIdent("Items")
 				elName = "Items"
