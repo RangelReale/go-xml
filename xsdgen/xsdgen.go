@@ -919,6 +919,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		dname := cfg.publicType(b, NameTypeImpl)
 		decodeConfigs = append(decodeConfigs, decodeConfig{
 			name:     dname,
+			typ:      dname,
 			op:       decodeOpDecode,
 			optional: true,
 		})
@@ -973,6 +974,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		}
 		decodeConfigs = append(decodeConfigs, decodeConfig{
 			name:     elName,
+			typ:      cfg.publicType(el.Type, NameTypeAbstract),
 			op:       dop,
 			optional: fieldOptional,
 			plural:   el.Plural,
@@ -1198,7 +1200,7 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 			_, _ = body.WriteString(`return nil, err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
 
-			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(dec.%s); ok {`, dc.name) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(dec.%s); ok {`, dc.typ) + "\n")
 			_, _ = body.WriteString(fmt.Sprintf(`ret.%s = itemDec`, dc.name) + "\n")
 			_, _ = body.WriteString(`} else {` + "\n")
 			_, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
@@ -1701,6 +1703,7 @@ const (
 
 type decodeConfig struct {
 	name     string
+	typ      string
 	op       decodeOp
 	optional bool
 	plural   bool
