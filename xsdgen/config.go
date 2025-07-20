@@ -556,6 +556,21 @@ func (cfg *Config) publicType(t xsd.Type, nameType NameType) string {
 	return cfg.public(xsd.XMLName(t))
 }
 
+func (cfg *Config) publicTypeWithAlias(t xsd.Type, nameType NameType) (string, error) {
+	typeName := cfg.publicType(t, nameType)
+
+	name := xsd.XMLName(t)
+
+	if cfg.isGenNamespace(name.Space) {
+		return typeName, nil
+	}
+	if nsi, ok := cfg.nsImports[name.Space]; ok {
+		return fmt.Sprintf("%s.%s", nsi.Alias, typeName), nil
+	} else {
+		return "", fmt.Errorf("unknown import for namespace '%s'", name.Space)
+	}
+}
+
 func (cfg *Config) publicComplex(t *xsd.ComplexType, nameType NameType) string {
 	name := cfg.public(t.Name)
 	if t.Abstract && nameType == NameTypeImpl {

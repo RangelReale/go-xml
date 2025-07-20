@@ -917,9 +917,13 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Typ: &ast.StarExpr{X: bident},
 		})
 		dname := cfg.publicType(b, NameTypeImpl)
+		dtyp, err := cfg.publicTypeWithAlias(b, NameTypeAbstract)
+		if err != nil {
+			return nil, err
+		}
 		decodeConfigs = append(decodeConfigs, decodeConfig{
 			name:     dname,
-			typ:      dname,
+			typ:      dtyp,
 			op:       decodeOpDecode,
 			optional: true,
 		})
@@ -965,7 +969,12 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			Optional: fieldOptional,
 		})
 		dop := decodeOpCopy
+		var dtyp string
 		if etyp, isComplex := el.Type.(*xsd.ComplexType); isComplex {
+			dtyp, err = cfg.publicTypeWithAlias(el.Type, NameTypeAbstract)
+			if err != nil {
+				return nil, err
+			}
 			if etyp.Abstract {
 				dop = decodeOpResolve
 			} else {
@@ -974,7 +983,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 		}
 		decodeConfigs = append(decodeConfigs, decodeConfig{
 			name:     elName,
-			typ:      cfg.publicType(el.Type, NameTypeAbstract),
+			typ:      dtyp,
 			op:       dop,
 			optional: fieldOptional,
 			plural:   el.Plural,
@@ -1200,7 +1209,7 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 			_, _ = body.WriteString(`return nil, err` + "\n")
 			_, _ = body.WriteString(`}` + "\n")
 
-			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(dec.%s); ok {`, dc.typ) + "\n")
+			_, _ = body.WriteString(fmt.Sprintf(`if itemDec, ok := decoded.(%s); ok {`, dc.typ) + "\n")
 			_, _ = body.WriteString(fmt.Sprintf(`ret.%s = itemDec`, dc.name) + "\n")
 			_, _ = body.WriteString(`} else {` + "\n")
 			_, _ = body.WriteString(fmt.Sprintf(`return nil, fmt.Errorf("resolved item don't implement '%s'")`, dc.name) + "\n")
