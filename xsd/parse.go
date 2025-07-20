@@ -739,7 +739,7 @@ func (t *ComplexType) parseComplexContent(ns string, root *xmltree.Element) {
 			}
 
 			for _, v := range el.Search(schemaNS, "anyAttribute") {
-				t.AnyAttribute = parseAnyAttribute(ns, v)
+				t.AnyAttribute = append(t.AnyAttribute, parseAnyAttribute(ns, v))
 			}
 		case "annotation":
 			doc = doc.append(parseAnnotation(el))
@@ -892,7 +892,6 @@ func parseAttribute(ns string, el *xmltree.Element) Attribute {
 func parseAnyAttribute(ns string, el *xmltree.Element) AnyAttribute {
 	var a AnyAttribute
 	var doc annotation
-	a.Enabled = true
 	// Non-QName xml attributes explicitly do *not* have a namespace.
 	if name := el.Attr("", "name"); strings.Contains(name, ":") {
 		a.Name = el.Resolve(el.Attr("", "name"))

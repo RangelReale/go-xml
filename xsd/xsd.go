@@ -97,7 +97,6 @@ type Attribute struct {
 }
 
 type AnyAttribute struct {
-	Enabled bool
 	// The canonical name of this anyAttribute.
 	Name xml.Name
 	// Annotation provided for this anyAttribute by the schema author.
@@ -175,8 +174,9 @@ type ComplexType struct {
 	// XML elements that this type may contain in its content.
 	Elements []Element
 	// Possible attributes for the element's opening tag.
-	Attributes   []Attribute
-	AnyAttribute AnyAttribute
+	Attributes []Attribute
+	// Possible anyAttributes.
+	AnyAttribute []AnyAttribute
 	// An abstract type does not appear in the xml document, but
 	// is "implemented" by other types in its substitution group.
 	Abstract bool
