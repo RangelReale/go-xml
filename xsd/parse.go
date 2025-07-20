@@ -737,6 +737,10 @@ func (t *ComplexType) parseComplexContent(ns string, root *xmltree.Element) {
 			for _, v := range el.Search(schemaNS, "attribute") {
 				t.Attributes = append(t.Attributes, parseAttribute(ns, v))
 			}
+
+			for _, v := range el.Search(schemaNS, "anyAttribute") {
+				t.AnyAttribute = parseAnyAttribute(ns, v)
+			}
 		case "annotation":
 			doc = doc.append(parseAnnotation(el))
 		default:
@@ -872,6 +876,36 @@ func parseAttribute(ns string, el *xmltree.Element) Attribute {
 	a.Default = el.Attr("", "default")
 	a.Scope = el.Scope
 	a.Optional = el.Attr("", "use") != "required"
+
+	walk(el, func(el *xmltree.Element) {
+		if el.Name.Local == "annotation" {
+			doc = doc.append(parseAnnotation(el))
+		}
+	})
+	a.Doc = string(doc)
+	// Other attributes could be useful later. One such attribute is
+	// wsdl:arrayType.
+	a.Attr = el.StartElement.Attr
+	return a
+}
+
+func parseAnyAttribute(ns string, el *xmltree.Element) AnyAttribute {
+	var a AnyAttribute
+	var doc annotation
+	a.Enabled = true
+	// Non-QName xml attributes explicitly do *not* have a namespace.
+	if name := el.Attr("", "name"); strings.Contains(name, ":") {
+		a.Name = el.Resolve(el.Attr("", "name"))
+	} else {
+		a.Name.Local = name
+	}
+	namespace := el.Attr("", "namespace")
+	if namespace != "" {
+		a.Name.Space = namespace
+	} else {
+		a.Name.Space = ns
+	}
+	a.ProcessContents = el.Attr("", "processContents")
 
 	walk(el, func(el *xmltree.Element) {
 		if el.Name.Local == "annotation" {

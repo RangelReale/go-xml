@@ -96,6 +96,20 @@ type Attribute struct {
 	xmltree.Scope
 }
 
+type AnyAttribute struct {
+	Enabled bool
+	// The canonical name of this anyAttribute.
+	Name xml.Name
+	// Annotation provided for this anyAttribute by the schema author.
+	Doc string
+	// (lax | skip | strict) : strict
+	ProcessContents string
+	// Any additional attributes provided in the <xs:anyAttribute> element.
+	Attr []xml.Attr
+	// Used for resolving qnames in additional attributes.
+	xmltree.Scope
+}
+
 // A Schema is the decoded form of an XSD <schema> element. It contains
 // a collection of all types declared in the schema. Top-level elements
 // are not recorded in a Schema.
@@ -161,7 +175,8 @@ type ComplexType struct {
 	// XML elements that this type may contain in its content.
 	Elements []Element
 	// Possible attributes for the element's opening tag.
-	Attributes []Attribute
+	Attributes   []Attribute
+	AnyAttribute AnyAttribute
 	// An abstract type does not appear in the xml document, but
 	// is "implemented" by other types in its substitution group.
 	Abstract bool
