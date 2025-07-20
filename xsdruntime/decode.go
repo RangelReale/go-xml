@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+type DecoderAny interface {
+	DecodeAny() (any, error)
+}
+
 type DecoderInstanceFactory struct {
 	Namespaces *DecoderNamespace
 	Factory    *InstanceFactory
