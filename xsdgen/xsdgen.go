@@ -921,6 +921,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			name:     dname,
 			op:       decodeOpDecode,
 			optional: true,
+			abstract: b.Abstract,
 		})
 	}
 
@@ -976,6 +977,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			op:       dop,
 			optional: fieldOptional,
 			plural:   el.Plural,
+			abstract: cfg.isAbstract(el.Type),
 		})
 
 		if /*el.Default != "" ||*/ nonTrivialBuiltin(el.Type) {
@@ -1034,6 +1036,7 @@ func (cfg *Config) genComplexType(t *xsd.ComplexType) ([]spec, error) {
 			name:     atName,
 			op:       decodeOpCopy,
 			optional: fieldOptional,
+			abstract: cfg.isAbstract(attr.Type),
 		})
 
 		if /*attr.Default != "" ||*/ nonTrivialBuiltin(attr.Type) {
@@ -1151,7 +1154,27 @@ func (cfg *Config) genComplexTypeDecodeMethod(name string, t *xsd.ComplexType, d
 	_, _ = body.WriteString(fmt.Sprintf(`ret := &dec.%s{}`, name) + "\n")
 	for _, dc := range decodeConfigs {
 		if dc.plural {
-			_, _ = body.WriteString(fmt.Sprintf(`// TODO: array '%s'`, dc.name) + "\n") // TODO
+			_, _ = body.WriteString(fmt.Sprintf(`for itemidx := range t.%s {`, dc.name) + "\n")
+
+			if dc.optional {
+				_, _ = body.WriteString(fmt.Sprintf(`if t.%s[itemidx] == nil {`, dc.name) + "\n")
+				_, _ = body.WriteString(`continue` + "\n")
+				_, _ = body.WriteString(`}` + "\n")
+			}
+
+			_, _ = body.WriteString(fmt.Sprintf(`decItem, err := t.%s[itemidx].Decode()`, dc.name) + "\n")
+			_, _ = body.WriteString(`if err != nil {` + "\n")
+			_, _ = body.WriteString(`return nil, err` + "\n")
+			_, _ = body.WriteString(`}` + "\n")
+
+			if dc.optional || dc.abstract {
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s = append(ret.%s, decItem)`, dc.name, dc.name) + "\n")
+			} else {
+				_, _ = body.WriteString(fmt.Sprintf(`ret.%s = append(ret.%s, *decItem)`, dc.name, dc.name) + "\n")
+			}
+
+			_, _ = body.WriteString(`}` + "\n")
+
 			continue
 		}
 
@@ -1684,4 +1707,5 @@ type decodeConfig struct {
 	op       decodeOp
 	optional bool
 	plural   bool
+	abstract bool
 }
